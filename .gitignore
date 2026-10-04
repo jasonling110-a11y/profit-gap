@@ -17,6 +17,10 @@ data/.scheduler.lock
 # ---- 单日大 JSON 快照（每个 ~2.5MB，只保留 scan_latest.json 即可，历史快照会撑爆仓库）----
 data/scan_20*.json
 
+# ---- 投资日历事件（~1.9MB，每天由 src/calendar_events.py 重新生成；
+#      流水线同一次运行里紧接着就被 build_home.py 消费，无需进版本库）----
+data/calendar_events.json
+
 # ---- WorkBuddy 项目数据 ----
 .workbuddy/
 

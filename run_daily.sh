@@ -39,9 +39,30 @@ if [ -z "${SKIP_AUDIT:-}" ]; then
   c=$?; [ "$c" -ne 0 ] && [ "$rc" -eq 0 ] && rc=$c
 fi
 
+# 聚合页「个人投资工作台」（投资日历 + 利润断层选股平台）。
+# 与主看板解耦：日历抓取失败也照样重建页面（问题会显示在页面上的提示条里），
+# 不会因为一个可选数据源挂掉就整天不产出首页。
+echo "▶ 抓取投资日历事件"
+"$PY" src/calendar_events.py
+c=$?; [ "$c" -ne 0 ] && [ "$rc" -eq 0 ] && rc=$c
+
+echo "▶ 生成聚合页（个人投资工作台）"
+"$PY" src/build_home.py
+c=$?; [ "$c" -ne 0 ] && [ "$rc" -eq 0 ] && rc=$c
+
+# 站点入口：首页 = 聚合页，完整看板另存 ASCII 别名。与云端 workflow 保持一致。
+cp -f 个人投资工作台.html index.html 2>/dev/null
+cp -f 利润断层工作台.html dashboard.html 2>/dev/null
+
+# 产物校验：退出码为 0 不等于页面有内容（数据源整批为空也能「成功」产出空页）
+echo "▶ 产物校验"
+"$PY" tools/verify_outputs.py
+c=$?; [ "$c" -ne 0 ] && [ "$rc" -eq 0 ] && rc=$c
+
 if [ "$rc" -ne 0 ]; then
-  echo "⚠ 完成但存在完整性问题：$DIR/利润断层工作台.html（退出码 $rc）"
+  echo "⚠ 完成但存在完整性问题：$DIR/个人投资工作台.html（退出码 $rc）"
 else
   echo "✔ 完成：$DIR/利润断层工作台.html"
+  echo "✔ 完成：$DIR/个人投资工作台.html（站点首页 index.html）"
 fi
 exit $rc

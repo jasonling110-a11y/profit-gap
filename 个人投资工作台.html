@@ -69,12 +69,14 @@ input[type=search]{min-width:170px}
 .calbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0 10px}
 .calbar .m{font-size:17px;font-weight:600;min-width:132px}
 .calbar .nav{display:flex;gap:6px}
-.grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:var(--line);
+.grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:1px;background:var(--line);
   border:1px solid var(--line);border-radius:10px;overflow:hidden}
+/* minmax(0,1fr) 而非 1fr：后者的隐含最小宽度是 min-content，格子里的「日号 + 事件数」
+   撑不住 320px 屏时会把整个网格顶宽 → 页面横向溢出。实测 360px 无事、320px 溢出 36 个节点。 */
 .grid .hd{background:var(--panel);color:var(--tx2);font-size:12px;text-align:center;padding:8px 2px}
 .cell{background:var(--bg);min-height:78px;padding:6px 7px;cursor:pointer;position:relative;
   display:flex;flex-direction:column;gap:5px;transition:background-color .15s;border:0;text-align:left;
-  font:inherit;color:inherit;width:100%}
+  font:inherit;color:inherit;width:100%;overflow:hidden}
 .cell:hover{background:var(--panel)}
 .cell.out{background:#0a0e13;color:var(--tx3);cursor:default}
 .cell.today{box-shadow:inset 0 0 0 1px rgba(240,72,62,.55)}
@@ -156,6 +158,15 @@ footer a:hover{color:var(--tx)}
   td.num{text-align:right}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}html{scroll-behavior:auto}}
+/* 极窄屏（≤380px，如 iPhone SE 一代）：格子里放不下「日号 + 事件数」两段，
+   去掉数字角标只留类型色点（信息仍有，且不再撑破网格）。 */
+@media(max-width:380px){
+  .cell{padding:4px 2px;min-height:46px;gap:3px}
+  .cell .d{gap:2px}
+  .cell .n{display:none}
+  .cell .dots{gap:2px}
+  .cell .dots i{width:5px;height:5px}
+}
 </style>
 </head>
 <body>

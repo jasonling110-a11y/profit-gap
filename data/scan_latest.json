@@ -30,7 +30,7 @@
    }
   ],
   "window_label": "按报告期覆盖 · 2026年三季报 2026-06-30~2026-10-04；2026年半年报 2026-03-31~2026-08-31（+45天公告日刷新宽限至 2026-10-04）",
-  "generated_at": "2026-10-04 09:19:10",
+  "generated_at": "2026-10-04 20:20:36",
   "thresholds": {
    "min_yoy": null,
    "min_accel": null,
@@ -73,7 +73,7 @@
  },
  "audit": {
   "scan_date": "2026-10-04",
-  "generated_at": "2026-10-04 09:19:10",
+  "generated_at": "2026-10-04 20:20:36",
   "last_trade_date": "2026-09-30",
   "window_mode": "period",
   "grace_days": 45,

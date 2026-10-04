@@ -46,9 +46,26 @@ jobs:
       - name: 完整性审计
         run: python tools/audit_pipeline.py
 
-      # GitHub Pages 只认 ASCII 文件名，把中文名看板复制一份作站点入口
+      # 投资日历 / 聚合页。与主看板解耦：日历抓取失败也照样重建聚合页
+      # （问题会显示在页面上的提示条里），不会因可选数据源挂掉就不产出首页。
+      - name: 抓取投资日历事件
+        run: python src/calendar_events.py
+
+      - name: 生成聚合页
+        run: python src/build_home.py
+
+      # GitHub Pages 站点入口：首页 = 聚合页（投资日历 + 断层选股平台），
+      # 完整看板（K 线 / 散点图 / 板块全景）留在 利润断层工作台.html，由首页显眼入口跳转。
+      # 注：实测 Pages **能**正常服务中文文件名（HTTP 200），中文名链接可用；
+      #     index.html / home.html 只是站点根入口与便于分享的短链。
       - name: 生成站点入口
-        run: cp 利润断层工作台.html index.html
+        run: |
+          cp 个人投资工作台.html index.html
+          cp 利润断层工作台.html dashboard.html
+
+      # 产物校验：脚本退出码为 0 不代表页面有内容（数据源整批为空也能「成功」生成空页）。
+      - name: 校验产物非空
+        run: python tools/verify_outputs.py
 
       # 结果落盘：把本轮关键结论写成文件一起提交。
       # 2026-10-04 踩过 GitHub 日志存储故障（Azure 返回 InvalidAuthenticationInfo），

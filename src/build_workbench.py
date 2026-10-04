@@ -284,6 +284,7 @@ footer{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);color:v
         <button type="button" class="hdr-tab" id="tabHome" aria-current="true"><span class="dot"></span>利润断层</button>
         <button type="button" class="hdr-tab" id="tabCal" aria-current="false"><span class="dot"></span>交易日历</button>
       </div>
+      <a class="cal-btn" id="goHome" href="个人投资工作台.html">工作台首页</a>
       <a class="cal-btn" id="calNew" href="https://market-calendar-71280.app.workbuddy.host/" target="_blank" rel="noopener noreferrer">新窗口打开</a>
     </nav>
   </header>
