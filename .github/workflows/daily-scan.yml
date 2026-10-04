@@ -19,7 +19,9 @@ concurrency:
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    # 云端 runner 只有 4 核，且跨境访问东财/新浪比国内慢很多（实测整轮约 40~45 分钟，
+    # 本地只要 1.5 分钟）。留足余量，别让 job 超时把跑了 40 分钟的结果丢掉。
+    timeout-minutes: 90
 
     steps:
       - name: 检出代码
@@ -48,14 +50,32 @@ jobs:
       - name: 生成站点入口
         run: cp 利润断层工作台.html index.html
 
+      # 结果落盘：把本轮关键结论写成文件一起提交。
+      # 2026-10-04 踩过 GitHub 日志存储故障（Azure 返回 InvalidAuthenticationInfo），
+      # Actions 日志可能读不出来，所以摘要必须落在仓库文件里，不能只依赖日志。
+      - name: 记录运行摘要
+        if: always()
+        run: |
+          echo "UTC $(date -u +%Y-%m-%dT%H:%M:%SZ) / 北京 $(TZ=Asia/Shanghai date +%F\ %T)"  > data/last_cloud_run.txt
+          echo "run_number ${{ github.run_number }}  event ${{ github.event_name }}"      >> data/last_cloud_run.txt
+          echo "--- summary ---"                                                          >> data/last_cloud_run.txt
+          python tools/cloud_summary.py >> data/last_cloud_run.txt 2>&1 || echo "(摘要生成失败)" >> data/last_cloud_run.txt
+
       - name: 提交并推送
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git config pull.rebase true
           git add -A
           if git diff --cached --quiet; then
             echo "无内容变化，跳过提交"
           else
             git commit -m "chore: 利润断层每日扫描 $(TZ=Asia/Shanghai date +%Y-%m-%d)"
-            git push
+            # 整轮要跑 40+ 分钟，期间 main 完全可能被别的提交推进（手动触发、诊断提交等）。
+            # 不 rebase 直接 push 会被 non-fast-forward 拒绝，白跑一轮。
+            for i in 1 2 3; do
+              git pull --rebase --autostash origin main && git push origin main && break
+              echo "第 $i 次推送失败，5 秒后重试…"; sleep 5
+            done
+            git push origin main
           fi
