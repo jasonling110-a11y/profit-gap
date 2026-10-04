@@ -1,0 +1,29 @@
+name: 连通性探测
+on:
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: 探测数据源可达性
+        run: |
+          echo "=== 控制组（国外站点）==="
+          for u in "https://api.github.com" "https://www.google.com"; do
+            c=$(curl -s -o /dev/null -w "%{http_code}" -m 10 "$u" || echo ERR)
+            echo "  $c  $u"
+          done
+          echo "=== 数据源（东财/新浪/腾讯）==="
+          for u in \
+            "https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_DMSK_FN_MAINFINADATA&columns=ALL&pageNumber=1&pageSize=1" \
+            "https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=1&fs=m:0+t:6&fields=f12" \
+            "https://hq.sinajs.cn/list=sh600519" \
+            "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh600519,day,,,10,qfq" \
+            "https://finance.sina.com.cn" ; do
+            c=$(curl -s -o /dev/null -w "%{http_code}|%{time_total}s" -m 12 -A "Mozilla/5.0" "$u" || echo "ERR")
+            echo "  $c  $u"
+          done
+          echo "=== DNS 解析 ==="
+          for h in datacenter-web.eastmoney.com hq.sinajs.cn web.ifzq.gtimg.cn; do
+            echo "  $h -> $(getent hosts $h | head -1 || echo 解析失败)"
+          done
