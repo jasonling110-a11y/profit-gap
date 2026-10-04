@@ -213,6 +213,62 @@ footer{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);color:v
   *,*:before,*:after{animation:none!important;transition:none!important}
   html{scroll-behavior:auto}
 }
+/* ===== 交易日历（外部模块 · iframe 嵌入）================================
+   为什么必须是「全屏覆盖层」而不是内联进文档流：
+   日历本体（webapp/index.html）是 body{overflow:hidden} + .app{height:100dvh}
+   的全屏应用，布局为「左 396px 日历栏 + 右侧内容栏」，且内部滚动交给自己的容器。
+   内联到本页文档流里要么没有确定高度（塌陷），要么被窄容器挤爆。
+   给它独立一整层，既保持了原版页面结构与观感，也满足「两模块互不干扰」。
+   ==================================================================== */
+.hdr-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.hdr-tabs{display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:3px}
+.hdr-tab{appearance:none;-webkit-appearance:none;border:0;background:transparent;color:var(--tx2);
+  font:600 13px/1.6 inherit;padding:6px 14px;border-radius:7px;cursor:pointer;white-space:nowrap;
+  transition:background-color .2s,color .2s}
+.hdr-tab:hover{color:var(--tx);background:var(--panel2)}
+.hdr-tab[aria-current="true"]{background:var(--upbg);color:var(--up);box-shadow:inset 0 0 0 1px rgba(240,72,62,.45)}
+.hdr-tab:focus-visible{outline:2px solid var(--info);outline-offset:2px}
+.hdr-tab .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--line2);margin-right:7px;vertical-align:1px}
+.hdr-tab[aria-current="true"] .dot{background:var(--up)}
+@media(max-width:560px){
+  .hdr-nav{width:100%}
+  .hdr-tabs{flex:1;justify-content:stretch}
+  .hdr-tab{flex:1;text-align:center;padding:7px 6px}
+}
+/* 覆盖层：100dvh 放在 100vh 之后——iOS Safari 的 100vh 含地址栏，会把底部裁掉 */
+#calMask{position:fixed;inset:0;background:rgba(6,9,13,.72);z-index:120;display:none}
+#calMask.on{display:block}
+#calShell{position:fixed;inset:0;z-index:121;display:none;flex-direction:column;
+  background:var(--bg);height:100vh;height:100dvh}
+#calShell.on{display:flex}
+.cal-bar{flex:none;display:flex;align-items:center;gap:10px;
+  min-height:calc(48px + env(safe-area-inset-top,0px));
+  padding:env(safe-area-inset-top,0px) 14px 0;border-bottom:1px solid var(--line);background:var(--panel)}
+.cal-bar .t{font-size:14px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cal-bar .t em{font-style:normal;color:var(--tx3);font-size:12px;font-weight:400;margin-left:8px}
+.cal-btn{appearance:none;-webkit-appearance:none;background:var(--panel2);border:1px solid var(--ctl);
+  color:var(--tx);border-radius:7px;padding:6px 11px;font:13px/1.4 inherit;cursor:pointer;
+  white-space:nowrap;text-decoration:none;transition:border-color .2s,transform .2s}
+.cal-btn:hover{border-color:var(--acc)}
+.cal-btn:active{transform:scale(.96)}
+.cal-btn:focus-visible{outline:2px solid var(--info);outline-offset:2px}
+.cal-stage{flex:1;min-height:0;position:relative;background:var(--bg)}
+.cal-stage>iframe{display:block;width:100%;height:100%;border:0;background:var(--bg)}
+.cal-wrap{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;
+  justify-content:center;gap:14px;padding:24px;text-align:center;color:var(--tx2)}
+.cal-wrap.on{display:flex}
+.cal-wrap h3{font-size:15px;color:var(--tx);font-weight:600}
+.cal-wrap p{font-size:13px;max-width:440px;line-height:1.9;color:var(--tx2)}
+.cal-wrap .ops{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.cal-spin{width:18px;height:18px;border:2px solid var(--line2);border-top-color:var(--up);
+  border-radius:50%;animation:calspin .8s linear infinite}
+@keyframes calspin{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.cal-spin{animation:none}}
+@media(max-width:560px){
+  .cal-bar .t em{display:none}
+  .cal-bar{padding-left:10px;padding-right:10px}
+  .cal-btn{padding:6px 9px}
+}
 </style>
 </head>
 <body>
@@ -223,6 +279,13 @@ footer{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);color:v
       <h1>利润断层<span>工作台</span></h1>
       <div class="sub" id="meta"></div>
     </div>
+    <nav class="hdr-nav" aria-label="模块切换">
+      <div class="hdr-tabs">
+        <button type="button" class="hdr-tab" id="tabHome" aria-current="true"><span class="dot"></span>利润断层</button>
+        <button type="button" class="hdr-tab" id="tabCal" aria-current="false"><span class="dot"></span>交易日历</button>
+      </div>
+      <a class="cal-btn" id="calNew" href="https://market-calendar-71280.app.workbuddy.host/" target="_blank" rel="noopener noreferrer">新窗口打开</a>
+    </nav>
   </header>
 
   <main>
@@ -325,6 +388,34 @@ footer{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);color:v
     <div id="mNote" style="margin-top:8px"></div>
   </div>
 </div>
+
+<!-- ===== 交易日历 · 外部模块（iframe 嵌入 + 全屏覆盖层）====================
+     role=dialog + aria-modal：读屏可识别，Esc 关闭，焦点锁在层内。
+     关闭时会摘掉 iframe 的 src —— 让它彻底停止活动，两个模块互不干扰
+     （不抢定时器、不抢滚动、不占后台网络）。
+     ================================================================== -->
+<div id="calMask"></div>
+<section id="calShell" role="dialog" aria-modal="true" aria-labelledby="calTitle" tabindex="-1">
+  <header class="cal-bar">
+    <span class="t" id="calTitle">交易日历<em>外部模块 · 独立部署</em></span>
+    <a class="cal-btn" id="calNewBar" href="https://market-calendar-71280.app.workbuddy.host/" target="_blank" rel="noopener noreferrer">新窗口</a>
+    <button type="button" class="cal-btn" id="calRetry">重试</button>
+    <button type="button" class="cal-btn" id="calClose">关闭 (Esc)</button>
+  </header>
+  <div class="cal-stage">
+    <iframe id="calFrame" title="交易日历" referrerpolicy="no-referrer-when-downgrade"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads"></iframe>
+    <div class="cal-wrap" id="calLoad"><div class="cal-spin"></div><span>正在加载交易日历…</span></div>
+    <div class="cal-wrap" id="calFb" role="alert">
+      <h3>交易日历加载失败</h3>
+      <p id="calFbMsg"></p>
+      <div class="ops">
+        <button type="button" class="cal-btn" id="calFbRetry">重试</button>
+        <a class="cal-btn" id="calFbNew" href="https://market-calendar-71280.app.workbuddy.host/" target="_blank" rel="noopener noreferrer">在新窗口打开</a>
+      </div>
+    </div>
+  </div>
+</section>
 
 <script type="application/json" id="wb-payload">__DATA__</script>
 <script>
@@ -1329,6 +1420,129 @@ function applyHash(){
 }
 window.addEventListener("hashchange", applyHash);
 applyHash();
+
+/* ================= 交易日历 · 外部模块 ==================================
+   集成方式：iframe 嵌入 + 全屏覆盖层。
+   为什么选它而不是「源码级合并 / 内联」：
+     1) 日历是独立部署的三端应用（本机工作台 / GitHub Pages / WorkBuddy 云端，
+        还带微信小程序与云函数后端），有自己的发布链路；合并等于每次它更新
+        都要重新对齐一遍，且违反「两个模块可独立访问、互不干扰」。
+     2) 它是 body{overflow:hidden} + .app{height:100dvh} 的全屏应用，
+        内联进本页文档流没有确定高度。
+     3) 远端已实测不返回 X-Frame-Options / CSP frame-ancestors，允许被嵌入。
+   预留升级位：把 CAL.mode 改成 "api"，并让 calLoad() 改为取数自行渲染，
+   下面这层 UI 与交互一行都不用动；#calendar 深链就是将来做独立路由的接缝。
+   ======================================================================= */
+;(function(){
+  var CAL = {
+    mode: "iframe",                                   // "iframe"（当前）| "api"（预留）
+    url:  "https://market-calendar-71280.app.workbuddy.host/",
+    timeout: 12000                                    // ms，超时后给兜底 UI
+  };
+  function calEl(id){ return document.getElementById(id); }
+  var shell = calEl("calShell"), mask = calEl("calMask"), frame = calEl("calFrame"),
+      loadBox = calEl("calLoad"), fb = calEl("calFb"), fbMsg = calEl("calFbMsg"),
+      tabHome = calEl("tabHome"), tabCal = calEl("tabCal");
+  if(!shell || !frame) return;
+
+  var timer = null, loaded = false, lastFocus = null;
+
+  function isOpen(){ return shell.classList.contains("on"); }
+  function show(node, v){ if(node) node.classList.toggle("on", !!v); }
+  function setTab(isCal){
+    if(tabCal)  tabCal.setAttribute("aria-current", isCal ? "true" : "false");
+    if(tabHome) tabHome.setAttribute("aria-current", isCal ? "false" : "true");
+  }
+  function setHash(h){ try { history.replaceState(null, "", h); } catch(e){} }
+  function fail(msg){ show(loadBox, false); if(fbMsg) fbMsg.textContent = msg; show(fb, true); }
+
+  function calLoad(){
+    loaded = false;
+    show(fb, false); show(loadBox, true);
+    if(timer) clearTimeout(timer);
+    timer = setTimeout(function(){
+      if(!loaded){
+        fail("加载超时（超过 " + (CAL.timeout / 1000) + " 秒）。可能是网络较慢，或浏览器按第三方站点策略限制了嵌入。可重试，或直接在新窗口打开——功能完全一致。");
+      }
+    }, CAL.timeout);
+    frame.src = CAL.url;
+  }
+
+  frame.addEventListener("load", function(){
+    if(!isOpen()) return;                      // 页面初始化时的空 load，忽略
+    loaded = true;
+    if(timer) clearTimeout(timer);
+    show(loadBox, false);
+    // 跨域时读 location 必然抛错——那恰好证明内容真的加载出来了；
+    // 只有同源（about:blank，或被拒绝嵌入后回落）才读得到，此时判定为失败。
+    var blocked = false;
+    try {
+      var href = frame.contentWindow.location.href;
+      if(!href || href === "about:blank") blocked = true;
+    } catch(e) { /* 跨域 = 正常 */ }
+    if(blocked){
+      fail("目标站点不允许被嵌入（X-Frame-Options / CSP 限制）。请改用「在新窗口打开」。");
+    }
+  });
+  frame.addEventListener("error", function(){
+    loaded = true;
+    if(timer) clearTimeout(timer);
+    fail("网络异常，无法加载交易日历。请检查网络后重试。");
+  });
+
+  function calOpen(){
+    if(isOpen()) return;
+    lastFocus = document.activeElement;
+    shell.classList.add("on");
+    if(mask) mask.classList.add("on");
+    document.body.style.overflow = "hidden";
+    setTab(true);
+    if(!frame.getAttribute("src")) calLoad();
+    var c = calEl("calClose"); if(c) c.focus();
+    setHash("#calendar");
+  }
+  function calClose(){
+    if(!isOpen()) return;
+    shell.classList.remove("on");
+    if(mask) mask.classList.remove("on");
+    document.body.style.overflow = "";
+    setTab(false);
+    if(timer) clearTimeout(timer);
+    show(loadBox, false); show(fb, false);
+    frame.removeAttribute("src");              // 彻底停掉，避免后台继续跑
+    setHash(location.pathname + location.search);
+    if(lastFocus && lastFocus.focus) lastFocus.focus();
+  }
+
+  if(tabCal)  tabCal.addEventListener("click", calOpen);
+  if(tabHome) tabHome.addEventListener("click", function(){ calClose(); window.scrollTo({top:0, behavior:"smooth"}); });
+  if(mask)    mask.addEventListener("click", calClose);
+  [["calClose","calClose"],["calRetry","calLoad"],["calFbRetry","calLoad"]].forEach(function(p){
+    var el = calEl(p[0]);
+    if(!el) return;
+    el.addEventListener("click", p[1] === "calClose" ? calClose : calLoad);
+  });
+
+  document.addEventListener("keydown", function(e){
+    if((e.key === "Escape" || e.key === "Esc") && isOpen()){ e.preventDefault(); calClose(); }
+  });
+  // 精简焦点陷阱：Tab 只在覆盖层内循环，不会跑到背后的清单表格去
+  shell.addEventListener("keydown", function(e){
+    if(e.key !== "Tab") return;
+    var f = shell.querySelectorAll("button, a[href], iframe, [tabindex]:not([tabindex='-1'])");
+    if(!f.length) return;
+    var first = f[0], last = f[f.length - 1];
+    if(e.shiftKey && document.activeElement === first){ e.preventDefault(); last.focus(); }
+    else if(!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
+  });
+
+  function calSyncHash(){
+    if(location.hash === "#calendar"){ calOpen(); }
+    else if(isOpen()){ calClose(); }
+  }
+  window.addEventListener("hashchange", calSyncHash);
+  if(location.hash === "#calendar") calOpen();
+})();
 </script>
 </body>
 </html>
