@@ -1,0 +1,61 @@
+name: 利润断层每日扫描
+
+# 触发方式：
+#   1) 定时：每个工作日（周一~周五）北京时间 22:00 = UTC 14:00。
+#      A 股公告绝大多数在盘后 16:00~21:00 发布，22:00 能覆盖完当天全部盘后公告。
+#   2) 手动：在仓库 Actions 页点「Run workflow」，用于首次连通性测试。
+on:
+  schedule:
+    - cron: "0 14 * * 1-5"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write          # 允许把生成结果提交回仓库
+
+concurrency:
+  group: profit-gap-daily
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安装依赖
+        run: pip install --no-cache-dir -r requirements.txt
+
+      # 扫描：退出码非 0（数据完整性检查未通过）会让本步骤失败 → 不提交、不发布，
+      # 保住上一版已知完好的页面，而不是用一份可能漏票的清单覆盖它。
+      - name: 扫描利润断层
+        run: python src/profit_gap.py --workers 4
+
+      - name: 重建看板
+        run: python src/build_workbench.py
+
+      - name: 完整性审计
+        run: python tools/audit_pipeline.py
+
+      # GitHub Pages 只认 ASCII 文件名，把中文名看板复制一份作站点入口
+      - name: 生成站点入口
+        run: cp 利润断层工作台.html index.html
+
+      - name: 提交并推送
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "无内容变化，跳过提交"
+          else
+            git commit -m "chore: 利润断层每日扫描 $(TZ=Asia/Shanghai date +%Y-%m-%d)"
+            git push
+          fi

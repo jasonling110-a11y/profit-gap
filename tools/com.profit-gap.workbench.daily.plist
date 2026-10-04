@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.profit-gap.workbench.daily</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/sh</string>
+        <string>/Users/jason/Desktop/利润断层/tools/run_scheduled.sh</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/jason/Desktop/利润断层</string>
+
+    <!-- 周一~周五 22:00（launchd 的 Weekday：0=周日 … 6=周六，不支持区间，只能逐天列） -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>22</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>22</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>22</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>22</integer><key>Minute</key><integer>0</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>22</integer><key>Minute</key><integer>0</integer></dict>
+    </array>
+
+    <!-- 登录 / 开机时也跑一次：真正要不要执行交给 sched_guard.py 判断。
+         这一条补上了 launchd 官方文档说的盲区：「若到点时电脑是关机状态，任务不会补跑」。
+         开机登录 → 守卫发现数据过期 → 自动补一次。 -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/jason/Desktop/利润断层/data/logs/launchd.out</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/jason/Desktop/利润断层/data/logs/launchd.err</string>
+</dict>
+</plist>

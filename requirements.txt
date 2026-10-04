@@ -1,0 +1,9 @@
+# 利润断层工作台 · 云端运行依赖（与本地运行环境保持一致）
+akshare==1.18.64
+pandas==3.0.3
+numpy==2.4.6
+mini-racer==0.14.1
+lxml==6.1.1
+requests==2.34.2
+tqdm==4.68.3
+beautifulsoup4==4.15.0

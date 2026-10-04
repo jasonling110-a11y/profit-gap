@@ -1,0 +1,27 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---- 行情/财报缓存（云端每次全新抓取，无需提交；k_* 文件数以千计）----
+data/cache/*
+# 但交易日历要提交：它是云端能否正确判定「最后交易日」的关键，且体积极小
+!data/cache/trade_dates.csv
+
+# ---- 本机调度日志与锁（launchd / 定时包装脚本产生）----
+data/logs/
+data/.scheduler.lock
+
+# ---- 单日大 JSON 快照（每个 ~2.5MB，只保留 scan_latest.json 即可，历史快照会撑爆仓库）----
+data/scan_20*.json
+
+# ---- WorkBuddy 项目数据 ----
+.workbuddy/
+
+# ---- 系统 ----
+.DS_Store
+
+# ---- 本地备份文件 ----
+*.bak*
