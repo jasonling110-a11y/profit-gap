@@ -1,29 +1,71 @@
 name: 连通性探测
 on:
   workflow_dispatch:
+permissions:
+  contents: write
 jobs:
   probe:
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
-      - name: 探测数据源可达性
+      - uses: actions/checkout@v4
+      - name: 探测并写结果文件
         run: |
-          echo "=== 控制组（国外站点）==="
-          for u in "https://api.github.com" "https://www.google.com"; do
-            c=$(curl -s -o /dev/null -w "%{http_code}" -m 10 "$u" || echo ERR)
-            echo "  $c  $u"
+          OUT=probe_result.txt
+          : > $OUT
+          echo "UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $OUT
+          echo "runner: $(uname -srm)" >> $OUT
+          echo "nproc: $(nproc)" >> $OUT
+          echo "" >> $OUT
+          echo "=== 控制组（国外站点，应可达）===" >> $OUT
+          for u in "https://api.github.com" "https://www.cloudflare.com"; do
+            echo "  $(curl -s -o /dev/null -w '%{http_code} %{time_total}s' -m 10 "$u" || echo ERR)  $u" >> $OUT
           done
-          echo "=== 数据源（东财/新浪/腾讯）==="
+          echo "" >> $OUT
+          echo "=== 数据源（东财/新浪/腾讯）===" >> $OUT
           for u in \
             "https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_DMSK_FN_MAINFINADATA&columns=ALL&pageNumber=1&pageSize=1" \
             "https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=1&fs=m:0+t:6&fields=f12" \
             "https://hq.sinajs.cn/list=sh600519" \
-            "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh600519,day,,,10,qfq" \
-            "https://finance.sina.com.cn" ; do
-            c=$(curl -s -o /dev/null -w "%{http_code}|%{time_total}s" -m 12 -A "Mozilla/5.0" "$u" || echo "ERR")
-            echo "  $c  $u"
+            "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param=sh600519,day,,,10,qfq" ; do
+            echo "  $(curl -s -o /dev/null -w '%{http_code} %{time_total}s' -m 12 -A 'Mozilla/5.0' "$u" || echo ERR)  $u" >> $OUT
           done
-          echo "=== DNS 解析 ==="
-          for h in datacenter-web.eastmoney.com hq.sinajs.cn web.ifzq.gtimg.cn; do
-            echo "  $h -> $(getent hosts $h | head -1 || echo 解析失败)"
+          echo "" >> $OUT
+          echo "=== DNS ===" >> $OUT
+          for h in datacenter-web.eastmoney.com hq.sinajs.cn web.ifzq.gtimg.cn push2.eastmoney.com; do
+            echo "  $h -> $(getent hosts $h | head -1 || echo FAIL)" >> $OUT
           done
+          echo "" >> $OUT
+          echo "=== akshare 实测（抓 1 只票的日 K）===" >> $OUT
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: akshare 实测
+        continue-on-error: true
+        run: |
+          pip install -q akshare==1.18.64 mini-racer==0.14.1 2>&1 | tail -3
+          python - <<'PY' >> probe_result.txt 2>&1
+import time, traceback
+t0=time.time()
+try:
+    import akshare as ak
+    print(f"[import] {time.time()-t0:.1f}s")
+    t1=time.time()
+    df=ak.stock_yjbb_em(date="20260630")
+    print(f"[东财业绩报表 20260630] {time.time()-t1:.1f}s  行数={len(df)}")
+except Exception:
+    print("[东财业绩报表] 失败:"); traceback.print_exc()
+try:
+    t2=time.time()
+    df2=ak.stock_zh_a_daily(symbol="sh600519", adjust="qfq")
+    print(f"[新浪日K sh600519] {time.time()-t2:.1f}s  行数={len(df2)}")
+except Exception:
+    print("[新浪日K] 失败:"); traceback.print_exc()
+PY
+      - name: 提交结果
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -f probe_result.txt
+          git commit -m "探测结果 $(date -u +%Y-%m-%dT%H:%M:%SZ)" || echo "无变化"
+          git push
