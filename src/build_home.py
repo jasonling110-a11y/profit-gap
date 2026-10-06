@@ -88,14 +88,11 @@ h1 span{color:var(--up)}
 /* 外部模块（指数看盘）：iframe 必须有确定高度，否则全屏应用会塌陷成 0 */
 .ext{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;position:relative}
 .ext>iframe{display:block;width:100%;height:min(78vh,880px);border:0;background:var(--bg)}
+/* 加载遮罩：正常情况下 load 一到就消失；卡住时它就是「点一下重试」的隐形兜底
+   （2026-10-06 工具栏的「重新加载」按钮已按要求删掉，重试能力收进这里，不占版面）。 */
 .ext .extload{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
-  color:var(--tx2);font-size:13px;gap:10px}
+  color:var(--tx2);font-size:13px;gap:10px;text-align:center;padding:0 16px;cursor:pointer}
 .ext .extload.on{display:flex}
-.extops{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px}
-.extops .hint{color:var(--tx2);font-size:12px;flex:1;min-width:180px}
-/* 视图切换：完整应用 / 工作台内建视图。用现成的 .btn + .btn.on（红底=当前视图），
-   不再引一套新配色，保证与工作台其余按钮同源。 */
-.viewsw{display:inline-flex;gap:4px;flex:0 0 auto}
 
 @media(max-width:900px){
   .shell{grid-template-columns:minmax(0,1fr);column-gap:0;
@@ -107,11 +104,6 @@ h1 span{color:var(--up)}
   .tabs{flex-direction:row;flex:1;padding:3px}
   .tab{flex:1;justify-content:center;text-align:center;padding:8px 6px}
   .ext>iframe{height:min(70vh,680px)}
-  /* 工具栏窄屏改成「按钮各占一行、说明独占整行」：
-     说明里那句「含『笔记』与『艾丽的总结』」挤在两颗按钮右边只剩 ~120px，
-     会变成一根三行窄柱，读起来很费劲。order:9 让说明永远排在按钮后面。 */
-  .extops{gap:8px}
-  .extops .hint{order:9;flex:1 1 100%;min-width:0}
 }
 
 /* ---------- 通用控件 ---------- */
@@ -276,20 +268,12 @@ footer a:hover{color:var(--tx)}
 
   <main>
     <!-- ============ 分页 1：投资日历 ============
-         默认直接内嵌**完整的市场日历应用**（它自带「笔记」与「艾丽的总结」——
+         直接内嵌**完整的市场日历应用**（它自带「笔记」与「艾丽的总结」——
          2026-10-06 用户明确要求这两项功能「不得删改」，所以这里只是把它嵌进来，
          一行都不去改那个应用；它的云笔记登录在自己那个源上跑，不受父页面影响）。
-         「工作台月历」= 本页原有的自建月历（A 股事件 7 类），保留不删，一键可切。 -->
+         2026-10-06 二次要求：工具栏整排按钮（完整日历/工作台月历/新窗口打开/重新加载）全部去掉，
+         页面只留内嵌应用本身；加载失败时点加载遮罩可重试（隐形兜底，不占版面）。 -->
     <section id="pgCal" role="tabpanel" aria-labelledby="tabCal">
-      <div class="extops">
-        <div class="viewsw" role="group" aria-label="日历视图切换">
-          <button type="button" class="btn on" id="calVFull" aria-pressed="true">完整日历</button>
-          <button type="button" class="btn" id="calVIn" aria-pressed="false">工作台月历</button>
-        </div>
-        <span class="hint">完整日历为独立部署应用，含「笔记」与「艾丽的总结」；数据由它自行更新，读数不新时点「重新加载」。</span>
-        <a class="btn" id="calNew" href="https://market-calendar-71280.app.workbuddy.host/" target="_blank" rel="noopener noreferrer">新窗口打开</a>
-        <button type="button" class="btn" id="calReload">重新加载</button>
-      </div>
       <div class="ext" id="calExt">
         <iframe id="calFrame" title="市场日历（含笔记与艾丽的总结）" referrerpolicy="no-referrer-when-downgrade"
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals"></iframe>
@@ -322,11 +306,7 @@ footer a:hover{color:var(--tx)}
          iframe 走懒加载：src 在首次切到本页时才写入（见 showPage），
          否则首屏要多等一个 117 KB 的外部应用才能看到日历。 -->
     <section id="pgIdx" role="tabpanel" aria-labelledby="tabIdx" hidden>
-      <div class="extops">
-        <span class="hint">外部模块 · 数据由该应用自行更新；读数不新时点「重新加载」。</span>
-        <a class="btn" id="idxNew" href="https://global-market-dashboard-68975.app.workbuddy.host/" target="_blank" rel="noopener noreferrer">新窗口打开</a>
-        <button type="button" class="btn" id="idxReload">重新加载</button>
-      </div>
+      <!-- 2026-10-06 用户要求：工具栏按钮（新窗口打开/重新加载）全部去掉，只留内嵌应用 -->
       <div class="ext">
         <iframe id="idxFrame" title="指数看盘" referrerpolicy="no-referrer-when-downgrade"
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads"></iframe>
@@ -335,19 +315,10 @@ footer a:hover{color:var(--tx)}
     </section>
 
     <!-- ============ 分页 3：利润断层 ============
-         默认直接内嵌**完整看板**（K 线弹窗 / 散点图 / 板块全景 / 核心断层区 全在里面），
-         所以页头那个「完整看板（含 K 线）」入口已无必要，已删除（见 header 注释）。
-         「工作台清单」= 本页原有的选股表（区间筛选 / 搜索 / 排序），保留不删，一键可切。 -->
+         直接内嵌**完整看板**（K 线弹窗 / 散点图 / 板块全景 / 核心断层区 全在里面），
+         页头那个「完整看板（含 K 线）」入口已无必要，已删除（见 header 注释）。
+         2026-10-06 二次要求：工具栏整排按钮（完整看板/工作台清单/新窗口打开/重新加载）也全部去掉。 -->
     <section id="pgPicks" role="tabpanel" aria-labelledby="tabPk" hidden>
-      <div class="extops">
-        <div class="viewsw" role="group" aria-label="利润断层视图切换">
-          <button type="button" class="btn on" id="pkVFull" aria-pressed="true">完整看板</button>
-          <button type="button" class="btn" id="pkVIn" aria-pressed="false">工作台清单</button>
-        </div>
-        <span class="hint">完整看板含 K 线图、散点图、板块全景与核心断层区；点任意个股即可看 K 线。</span>
-        <a class="btn" id="pkNew" href="利润断层工作台.html" target="_blank" rel="noopener noreferrer">新窗口打开</a>
-        <button type="button" class="btn" id="pkReload">重新加载</button>
-      </div>
       <div class="ext" id="pkExt">
         <iframe id="pkFrame" title="利润断层工作台（含 K 线）" referrerpolicy="no-referrer-when-downgrade"></iframe>
         <div class="extload" id="pkLoad"><span>正在加载完整看板…</span></div>
@@ -429,22 +400,19 @@ const PAGES = {calendar:{tab:"tabCal", pg:"pgCal", hash:"#calendar", ext:"cal"},
 const HOME = "calendar";
 const on = (id, fn) => { const el = $(id); if(el) el.addEventListener("click", fn); };
 
-/* 三个页卡默认都直接内嵌**完整应用**（2026-10-06 用户要求「点击页卡后直接展示完整页面，
-   无需多余的中间跳转」）。每个页卡各带一个 iframe + 视图切换：
-   - 投资日历：完整日历（市场日历应用，自带笔记 + 艾丽的总结）/ 工作台月历（自建）
-   - 利润断层：完整看板（含 K 线）/ 工作台清单（自建）
-   自建视图一行没删，只是默认不显示 —— 用户明确说过「不得删改」。
+/* 三个页卡都直接内嵌**完整应用**（2026-10-06 用户要求「点击页卡后直接展示完整页面，
+   无需多余的中间跳转」）。2026-10-06 二次要求把每页的工具栏按钮
+   （完整日历/工作台月历/完整看板/工作台清单/新窗口打开/重新加载）整排去掉 ——
+   页面只留内嵌应用本身；自建月历/选股表的 DOM 仍保留在页内（hidden，无入口）。
    src 在「首次真正显示该 iframe」时才写入；利润断层的 src 依赖本页所在目录，
    所以用相对路径（在 Pages 与 file:// 下都对）。 */
 const EXTS = {
   cal: { frame:"calFrame", load:"calLoad", url:"https://market-calendar-71280.app.workbuddy.host/",
-         label:"完整日历", timeout:20000, inBox:"calIn", vFull:"calVFull", vIn:"calVIn",
-         inName:"工作台月历" },
+         label:"完整日历", timeout:20000 },
   idx: { frame:"idxFrame", load:"idxLoad", url:"https://global-market-dashboard-68975.app.workbuddy.host/",
          label:"指数看盘", timeout:20000 },
   pk:  { frame:"pkFrame",  load:"pkLoad",  url:"利润断层工作台.html",
-         label:"完整看板", timeout:20000, inBox:"pkIn",  vFull:"pkVFull",  vIn:"pkVIn",
-         inName:"工作台清单" }
+         label:"完整看板", timeout:20000 }
 };
 const EXT_TIMERS = {};
 
@@ -466,8 +434,9 @@ function showPage(name, push){
 }
 
 /* 外部应用 iframe 懒加载：首屏不去拉几 MB 的外部页面，只有真正切到该页卡才写 src。
-   已加载过就不再重写 src（重写会把应用里的月份选择、滚动位置一并重置），
-   只有点「重新加载」才带 _r= 时间戳强刷。 */
+   已加载过就不再重写 src（重写会把应用里的月份选择、滚动位置一并重置）。
+   「重新加载」按钮已删 —— 重试能力收进加载遮罩：卡住时遮罩常驻，点它一下就带
+   _r= 时间戳强刷，正常情况下遮罩根本不出现，不占任何版面。 */
 function loadExt(key, bust){
   const m = EXTS[key];
   if(!m) return null;
@@ -481,48 +450,29 @@ function loadExt(key, bust){
     if(txt) txt.textContent = (bust ? "正在重新加载" : "正在加载") + m.label + "…";
     if(EXT_TIMERS[key]) clearTimeout(EXT_TIMERS[key]);
     // load 有可能因为对端拒绝嵌入 / 网络慢而永远不来，用 once 监听 + 超时兜底，
-    // 别让首屏（默认就是日历页）留一个空洞 —— 至少告诉用户还能走内建视图。
+    // 别让首屏（默认就是日历页）留一个空洞。
     f.addEventListener("load", ()=>{
       if(EXT_TIMERS[key]) clearTimeout(EXT_TIMERS[key]);
       box.classList.remove("on");
     }, { once:true });
     EXT_TIMERS[key] = setTimeout(()=>{
       box.classList.add("on");
-      if(txt) txt.textContent = m.label + "加载较慢或失败 —— 可点「重新加载」重试"
-        + (m.inName ? "，或切到「" + m.inName + "」看工作台内建视图。" : "。");
+      if(txt) txt.textContent = m.label + "加载较慢或失败 —— 点这里重试";
     }, m.timeout);
+    if(!box.dataset.retry){                 // 只绑一次；负向测试可能反复进这里
+      box.dataset.retry = "1";
+      box.addEventListener("click", ()=>loadExt(key, true));
+    }
   }
-  // 相对 URL（利润断层看板与被嵌页面同目录）原样使用，只有强刷才加时间戳
+  // 相对 URL（利润断层看板与被嵌页面同目录）原样使用，只有重试才加时间戳
   f.setAttribute("src", bust
     ? m.url + (m.url.indexOf("?")>=0 ? "&" : "?") + "_r=" + Date.now()
     : m.url);
   return f;
 }
-
-/* 视图切换：完整应用 <-> 工作台内建视图。切到内建视图时把 iframe 的 src 摘掉，
-   免得后台那个应用还在跑（和看板模块层的做法一致）。 */
-function setView(key, full){
-  const m = EXTS[key];
-  if(!m || !m.inBox) return;
-  const box = $(m.inBox), fb = $(m.vFull), ib = $(m.vIn);
-  if(box) box.hidden = full;
-  if(fb) { fb.classList.toggle("on", full);  fb.setAttribute("aria-pressed", full ? "true":"false"); }
-  if(ib) { ib.classList.toggle("on", !full); ib.setAttribute("aria-pressed", full ? "false":"true"); }
-  const wrap = $({cal:"calExt", pk:"pkExt"}[key]);
-  if(wrap) wrap.hidden = !full;
-  if(full) loadExt(key);
-  else { const f = $(m.frame); if(f) f.removeAttribute("src"); }
-}
 on("tabCal", ()=>showPage("calendar"));
 on("tabIdx", ()=>showPage("indices"));
 on("tabPk",  ()=>showPage("picks"));
-on("idxReload", ()=>loadExt("idx", true));
-on("calReload", ()=>loadExt("cal", true));
-on("pkReload",  ()=>loadExt("pk",  true));
-on("calVFull", ()=>setView("cal", true));
-on("calVIn",   ()=>setView("cal", false));
-on("pkVFull",  ()=>setView("pk",  true));
-on("pkVIn",    ()=>setView("pk",  false));
 window.addEventListener("hashchange", ()=>{
   const h = location.hash;
   if(h==="#picks") showPage("picks", false);
