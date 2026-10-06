@@ -34,7 +34,12 @@ function boot(opts) {
   const dom = new JSDOM(html, o);
   return { dom, window: dom.window, doc: dom.window.document };
 }
-const click = (w, el) => el.dispatchEvent(new w.MouseEvent("click", { bubbles: true }));
+/* 空安全：负向测试会把「指数看盘」整个模块摘掉，此时 $("tabIdx") / $("idxFrame") 是 null。
+   直接 .dispatchEvent / .getAttribute 抛 TypeError 会让脚本崩在中间，后面的断言根本不会跑
+   （等于没测）—— check_calendar.js 实测吃过这个亏，只报了 46 条里的 3 条。 */
+const click = (w, el) => { if (el) el.dispatchEvent(new w.MouseEvent("click", { bubbles: true })); };
+const attrOf = (doc, id, a) => { const el = doc.getElementById(id); return el ? el.getAttribute(a) : null; };
+const hiddenOf = (doc, id) => { const el = doc.getElementById(id); return el ? el.hidden : null; };
 
 /* ============ 数据侧（直接从 HTML 里的 JSON 读，不信任页面 DOM） ============ */
 const CAL = payload(html, "cal-payload");
@@ -53,14 +58,38 @@ console.log("[1] 结构与可用性");
   const { window: w, doc } = boot();
   const $ = (id) => doc.getElementById(id);
 
-  ok("存在 tablist", !!doc.querySelector('[role="tablist"]') &&
-     doc.querySelectorAll('[role="tab"]').length === 2);
-  ok("两个分页标签 id 正确", !!$("tabCal") && !!$("tabPk"));
-  ok("两个 tabpanel 且 aria-labelledby 齐全",
-     $("pgCal").getAttribute("role") === "tabpanel" &&
-     $("pgPicks").getAttribute("role") === "tabpanel" &&
-     $("pgCal").getAttribute("aria-labelledby") === "tabCal" &&
-     $("pgPicks").getAttribute("aria-labelledby") === "tabPk");
+  ok("存在 tablist，且三个页卡", !!doc.querySelector('[role="tablist"]') &&
+     doc.querySelectorAll('[role="tab"]').length === 3);
+  ok("三个分页标签 id 正确", !!$("tabCal") && !!$("tabIdx") && !!$("tabPk"));
+  ok("三个 tabpanel 且 aria-labelledby 齐全",
+     attrOf(doc, "pgCal", "role") === "tabpanel" &&
+     attrOf(doc, "pgIdx", "role") === "tabpanel" &&
+     attrOf(doc, "pgPicks", "role") === "tabpanel" &&
+     attrOf(doc, "pgCal", "aria-labelledby") === "tabCal" &&
+     attrOf(doc, "pgIdx", "aria-labelledby") === "tabIdx" &&
+     attrOf(doc, "pgPicks", "aria-labelledby") === "tabPk");
+  // 用户要求「三个页卡换到左边竖着排列」：侧栏必须存在于 DOM 且在 <main> 之前，
+  // 否则 CSS 就算写了 column 方向，视觉上页卡也还是落在正文里。
+  ok("页卡位于左侧竖排侧栏（.sidenav 在 <main> 之前，且含 tablist）",
+     !!doc.querySelector("nav.sidenav") &&
+     !!doc.querySelector("nav.sidenav [role=tablist]") &&
+     (doc.querySelector("nav.sidenav").compareDocumentPosition(doc.querySelector("main")) &
+      doc.defaultView.Node.DOCUMENT_POSITION_FOLLOWING) !== 0);
+  const navTl = doc.querySelector("nav.sidenav [role=tablist]");
+  ok("侧栏 tablist 声明竖排（aria-orientation=vertical）",
+     !!navTl && navTl.getAttribute("aria-orientation") === "vertical");
+  ok("页卡顺序 = 投资日历 / 指数看盘 / 利润断层",
+     Array.from(doc.querySelectorAll("nav.sidenav [role=tab]")).map(b => b.textContent.trim()).join(",") ===
+     "投资日历,指数看盘,利润断层");
+  ok("指数看盘面板骨架：iframe / 加载遮罩 / 新窗口 / 重新加载",
+     !!$("idxFrame") && !!$("idxLoad") && !!$("idxNew") && !!$("idxReload"));
+  // 懒加载前提：首屏不得带 src，否则等于白等一个 117 KB 的外部应用
+  ok("指数看盘 iframe 首屏无 src（懒加载）",
+     !!$("idxFrame") && !attrOf(doc, "idxFrame", "src"));
+  ok("指数看盘新窗口链接带 rel=noopener 且指向已部署应用",
+     /noopener/.test(($("idxNew") || {}).rel || "") &&
+     /^https:\/\/global-market-dashboard-68975\.app\.workbuddy\.host\//.test(
+       attrOf(doc, "idxNew", "href") || ""));
   ok("日历页骨架：月切按钮 / 月标签 / 网格 / 事件列表",
      !!$("mPrev") && !!$("mNext") && !!$("mToday") && !!$("mLabel") && !!$("mGrid") && !!$("dList"));
   ok("选股页骨架：区间 / 快捷 / 搜索 / 重置 / 表体 / 汇总",
@@ -91,24 +120,60 @@ console.log("\n[2] 分页切换");
   const { window: w, doc } = boot();
   const $ = (id) => doc.getElementById(id);
 
-  ok("默认停在「投资日历」",
-     $("tabCal").getAttribute("aria-selected") === "true" &&
-     $("tabPk").getAttribute("aria-selected") === "false");
-  ok("默认日历页可见、选股页 hidden", !$("pgCal").hidden && $("pgPicks").hidden === true);
+  ok("默认停在「投资日历」（主页）",
+     attrOf(doc, "tabCal", "aria-selected") === "true" &&
+     attrOf(doc, "tabIdx", "aria-selected") === "false" &&
+     attrOf(doc, "tabPk", "aria-selected") === "false");
+  ok("默认日历页可见、另外两页 hidden",
+     hiddenOf(doc, "pgCal") === false && hiddenOf(doc, "pgIdx") === true && hiddenOf(doc, "pgPicks") === true);
+
+  click(w, $("tabIdx"));
+  ok("点「指数看盘」切到该页",
+     attrOf(doc, "tabIdx", "aria-selected") === "true" &&
+     attrOf(doc, "tabCal", "aria-selected") === "false" &&
+     attrOf(doc, "tabPk", "aria-selected") === "false");
+  ok("指数看盘页显示、其余隐藏",
+     hiddenOf(doc, "pgIdx") === false && hiddenOf(doc, "pgCal") === true && hiddenOf(doc, "pgPicks") === true);
+  ok("hash 写为 #indices", w.location.hash === "#indices", w.location.hash);
+  const src1 = attrOf(doc, "idxFrame", "src");
+  ok("首次切到指数看盘才写入 iframe src",
+     src1 === "https://global-market-dashboard-68975.app.workbuddy.host/", src1);
+  ok("首次加载不带缓存戳（便于断言与复用浏览器缓存）", !/_r=/.test(src1 || ""), src1);
+
+  // 来回切一次：不应重写 src，否则页面里的月份选择 / 滚动位置每次回来都被重置。
+  // 只比较 src 的「值」是测不出问题的——重写成同一个 URL 值不变，照样是一次真实导航。
+  // 所以这里在 iframe 上挂个探针，直接数「产品代码有没有再调 setAttribute('src')」。
+  let srcWrites = 0;
+  const frame = $("idxFrame");                       // 负向测试里可能是 null
+  const origSet = frame ? frame.setAttribute.bind(frame) : null;
+  if (frame) frame.setAttribute = function (n, v) { if (n === "src") srcWrites++; return origSet(n, v); };
+  click(w, $("tabCal"));
+  click(w, $("tabIdx"));
+  if (frame) frame.setAttribute = origSet;
+  ok("来回切换不重写已加载的 iframe src",
+     !!src1 && srcWrites === 0, "src=" + src1 + " 重写次数=" + srcWrites);
+
+  click(w, $("idxReload"));
+  const src2 = attrOf(doc, "idxFrame", "src");
+  ok("「重新加载」加时间戳强刷（绕缓存）",
+     /^https:\/\/global-market-dashboard-68975\.app\.workbuddy\.host\/\?_r=\d+$/.test(src2 || ""), src2);
+  ok("强刷后 src 与首次不同（确实重新发起了请求）", src2 !== src1);
 
   click(w, $("tabPk"));
   ok("点标签切到选股平台",
-     $("tabPk").getAttribute("aria-selected") === "true" &&
-     $("tabCal").getAttribute("aria-selected") === "false");
-  ok("选股页显示、日历页隐藏", $("pgCal").hidden === true && !$("pgPicks").hidden);
+     attrOf(doc, "tabPk", "aria-selected") === "true" &&
+     attrOf(doc, "tabCal", "aria-selected") === "false");
+  ok("选股页显示、其余隐藏",
+     hiddenOf(doc, "pgCal") === true && hiddenOf(doc, "pgIdx") === true && hiddenOf(doc, "pgPicks") === false);
   ok("hash 写为 #picks", w.location.hash === "#picks", w.location.hash);
-  ok("localStorage 记住分页", w.localStorage.getItem(LSKEY) === "picks",
-     w.localStorage.getItem(LSKEY));
 
   click(w, $("tabCal"));
-  ok("切回日历页", !$("pgCal").hidden && $("pgPicks").hidden === true);
+  ok("切回日历页", hiddenOf(doc, "pgCal") === false && hiddenOf(doc, "pgPicks") === true);
   ok("hash 更新为 #calendar", w.location.hash === "#calendar", w.location.hash);
-  ok("localStorage 同步为 calendar", w.localStorage.getItem(LSKEY) === "calendar");
+  // 2026-10-06 起首屏固定主页，不再用 localStorage 记忆「上次看到哪页」：
+  // 手机上带着上次的 picks 记忆值打开，第一眼不是主页，用户会以为页卡丢了。
+  ok("不再写 localStorage（首屏恒定落在主页）",
+     w.localStorage.getItem(LSKEY) === null, String(w.localStorage.getItem(LSKEY)));
 }
 
 /* ================= 3. 分页状态保持（三种进入方式） ================= */
@@ -117,23 +182,33 @@ console.log("\n[3] 分页状态保持");
   // 3a. 带 #picks 深链直接打开
   const a = boot({ url: "https://jasonling110-a11y.github.io/profit-gap/home.html#picks" });
   ok("深链 #picks 打开即停在选股平台",
-     !a.doc.getElementById("pgPicks").hidden && a.doc.getElementById("pgCal").hidden === true);
+     hiddenOf(a.doc, "pgPicks") === false && hiddenOf(a.doc, "pgCal") === true);
 
-  // 3b. 无 hash，但上次选的是 picks → 落到 localStorage
+  // 3a2. 带 #indices 深链直接打开，且此时才拉 iframe
+  const a2 = boot({ url: "https://jasonling110-a11y.github.io/profit-gap/home.html#indices" });
+  ok("深链 #indices 打开即停在指数看盘",
+     hiddenOf(a2.doc, "pgIdx") === false && hiddenOf(a2.doc, "pgCal") === true);
+  ok("深链 #indices 时才写 iframe src",
+     /^https:\/\/global-market-dashboard-68975\.app\.workbuddy\.host\//.test(
+       attrOf(a2.doc, "idxFrame", "src") || ""));
+
+  // 3b. 无 hash，即使残留了「上次看到 picks」的记忆值，也必须落在主页
+  //     （2026-10-06 用户明确要求「主页设置为投资日历」；旧版本会恢复到 picks）
   const b = boot({
     beforeParse(win) { try { win.localStorage.setItem(LSKEY, "picks"); } catch (e) {} },
   });
-  ok("无 hash 时按 localStorage 恢复到选股平台",
-     !b.doc.getElementById("pgPicks").hidden,
+  ok("无 hash 时无视 localStorage 残留，仍落在主页「投资日历」",
+     hiddenOf(b.doc, "pgCal") === false && hiddenOf(b.doc, "pgPicks") === true,
      "localStorage=" + b.window.localStorage.getItem(LSKEY));
 
-  // 3c. hash 与 localStorage 冲突 → hash 优先
+  // 3c. 有 hash 时一律听 hash
   const c = boot({
-    url: "https://jasonling110-a11y.github.io/profit-gap/home.html#calendar",
+    url: "https://jasonling110-a11y.github.io/profit-gap/home.html#indices",
     beforeParse(win) { try { win.localStorage.setItem(LSKEY, "picks"); } catch (e) {} },
   });
-  ok("hash 优先于 localStorage（显式 #calendar 覆盖记忆值）",
-     !c.doc.getElementById("pgCal").hidden && c.doc.getElementById("pgPicks").hidden === true);
+  ok("hash 优先于 localStorage（#indices 覆盖记忆值）",
+     hiddenOf(c.doc, "pgIdx") === false &&
+     hiddenOf(c.doc, "pgCal") === true && hiddenOf(c.doc, "pgPicks") === true);
 
   // 3d. 会话内切换后再切回，日历选中日不丢
   const d = boot();
@@ -449,7 +524,25 @@ console.log("\n[10] 响应式与安全");
   ok("窄屏选股表「名称 / 代码」列吸附左侧（横向滑动不迷失）",
      /#pTbl td:first-child\{position:sticky;left:0/.test(style));
   ok("窄屏选股表字号收紧到 12px（一行一只仍可读）", /#pTbl\{font-size:12px\}/.test(style));
-  ok("标签栏在窄屏铺满", /\.tabs\{flex:1\}/.test(style));
+  // ---- 三页卡侧栏：桌面竖排 / 窄屏顶部横条（2026-10-06）----
+  // 这一组是「反向断言」：谁要是把 .tabs 改回横排、或把窄屏那段删掉，
+  // 用户报的「手机上找不到 3 个页卡按钮」就会复发，这里必须先红。
+  ok("桌面布局是 侧栏 + 内容 两列网格",
+     /\.shell\{display:grid;grid-template-columns:196px minmax\(0,1fr\)/.test(style));
+  ok("桌面页卡竖排（.tabs 为 column）", /\.tabs\{[^}]*flex-direction:column/.test(style));
+  ok("侧栏常驻（position:sticky）", /\.sidenav\{[^}]*position:sticky/.test(style));
+  ok("≤900px 折叠为单列（侧栏不再占宽度，否则正文只剩 ~280px）",
+     /@media\(max-width:900px\)\{[\s\S]*?\.shell\{grid-template-columns:minmax\(0,1fr\)/.test(style));
+  ok("≤900px 侧栏转为顶部横条且三键等宽常驻可见",
+     /@media\(max-width:900px\)\{[\s\S]*?\.sidenav\{[^}]*flex-direction:row/.test(style) &&
+     /@media\(max-width:900px\)\{[\s\S]*?\.tabs\{flex-direction:row;flex:1/.test(style) &&
+     /@media\(max-width:900px\)\{[\s\S]*?\.tab\{flex:1/.test(style));
+  ok("≤900px 横条吸顶（top:0 + z-index）",
+     /@media\(max-width:900px\)\{[\s\S]*?\.sidenav\{[^}]*top:0[^}]*z-index:30/.test(style));
+  ok("外部模块 iframe 有确定高度（全屏应用内联会塌成 0）",
+     /\.ext>iframe\{[^}]*height:min\(/.test(style));
+  ok("外部模块加载遮罩有 on 态", /\.ext \.extload\{[\s\S]*?\}\s*\.ext \.extload\.on\{display:flex\}/.test(style) ||
+     /\.ext\.extload\.on\{display:flex\}/.test(style) || /\.extload\.on\{display:flex\}/.test(style));
   // 月历网格必须用 minmax(0,1fr)：用 1fr 时列的最小宽度是 min-content，
   // 320px 屏上「日号 + 事件数」会把网格顶宽 → 页面横向溢出（实测溢出 36 个节点）。
   ok("月历网格列可压缩（minmax(0,1fr)，防极窄屏横向溢出）",

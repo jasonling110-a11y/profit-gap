@@ -3,12 +3,13 @@
 """
 个人投资工作台 · 单文件 HTML 生成器
 ====================================
-把两份数据合成一个带分页标签的聚合页：
+把两份数据 + 一个外部应用合成一个带分页侧栏的聚合页：
 
-  分页 1 · 投资日历      ← data/calendar_events.json（src/calendar_events.py 产出）
+  页卡 1 · 投资日历（主页）  ← data/calendar_events.json（src/calendar_events.py 产出）
             月历网格 + 按月切换；点某天看当天事件（日期 / 类型 / 关联标的 / 说明）
-  分页 2 · 利润断层选股平台 ← data/scan_latest.json（src/profit_gap.py 产出）
-            列表：名称与代码 / 断层日期 / 断层幅度 / 当日涨跌幅 / 成交量 / 所属行业
+  页卡 2 · 指数看盘         ← 外部应用（已独立部署），iframe 懒加载
+  页卡 3 · 利润断层选股平台  ← data/scan_latest.json（src/profit_gap.py 产出）
+            列表：名称与代码 / 断层日期 / 断层幅度 / 连续断层 / 当日涨跌幅 / 成交量 / 所属行业
             支持日期区间筛选与断层幅度排序
 
 产出：个人投资工作台.html（主产物）+ home.html（ASCII 别名，给 GitHub Pages 当入口）
@@ -16,7 +17,8 @@
 设计约定：
   - 深色主题、配色与「利润断层工作台」完全一致（同一套 CSS 变量）
   - 单文件自包含，不加载任何 CDN，双击即可打开
-  - 分页状态用 localStorage + URL hash 双写：#calendar / #picks
+  - 桌面左侧竖排页卡；≤900px 折叠为顶部固定横条（触屏没有悬停，横条才看得见）
+  - 首屏固定落在主页「投资日历」；直达用 URL hash：#calendar / #indices / #picks
   - 红涨绿跌（中国大陆习惯）
 """
 from __future__ import annotations
@@ -56,22 +58,53 @@ a{color:var(--info)}
 .skip{position:absolute;left:-9999px;top:0;background:var(--panel2);border:1px solid var(--ctl);color:var(--tx);padding:8px 14px;border-radius:0 0 8px 0;z-index:99}
 .skip:focus{left:0}
 
-/* ---------- 页头 + 分页标签 ---------- */
-header{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+/* ---------- 布局：左侧竖排页卡 + 右侧内容 -------------------------------
+   2026-10-06 用户要求「把投资日历 / 指数看盘 / 利润断层这三个页卡换到左边竖着排列」。
+   桌面：196px 侧栏 + 右侧内容，侧栏 position:sticky 常驻。
+   窄屏（≤900px）：侧栏折叠成**顶部固定横条**，三个等宽按钮常驻可见。
+   为什么手机上不保持左竖排：375px 下若留一条左栏，正文只剩 ~280px，日历网格和
+   选股表都会被挤爆；而用户报的原始问题是「没有找到这 3 个页卡的按钮」——
+   原来那排标签在页头最下方、要滚过一屏元信息才看得到。横条常驻顶部才是对症的修法。 */
+.shell{display:grid;grid-template-columns:196px minmax(0,1fr);column-gap:22px;
+  grid-template-areas:"nav hdr" "nav main" "nav foot";align-items:start}
+.sidenav{grid-area:nav;position:sticky;top:22px;display:flex;flex-direction:column;gap:10px}
+header{grid-area:hdr;display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+main{grid-area:main;min-width:0}
+footer{grid-area:foot}
 h1{font-size:20px;font-weight:600;letter-spacing:.5px}
 h1 span{color:var(--up)}
 .sub{color:var(--tx2);font-size:13px;line-height:1.9}
 .hdr-nav{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.tabs{display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:3px}
+.tabs{display:flex;flex-direction:column;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:5px}
 .tab{appearance:none;-webkit-appearance:none;border:0;background:transparent;color:var(--tx2);
-  font:600 13px/1.6 inherit;padding:7px 16px;border-radius:7px;cursor:pointer;white-space:nowrap;
-  transition:background-color .2s,color .2s}
+  font:600 13px/1.6 inherit;padding:9px 12px;border-radius:7px;cursor:pointer;white-space:nowrap;
+  text-align:left;transition:background-color .2s,color .2s}
 .tab:hover{color:var(--tx);background:var(--panel2)}
 .tab[aria-selected="true"]{background:var(--upbg);color:var(--up);box-shadow:inset 0 0 0 1px rgba(240,72,62,.45)}
 .tab:focus-visible{outline:2px solid var(--info);outline-offset:2px}
 .tab .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--line2);margin-right:7px;vertical-align:1px}
 .tab[aria-selected="true"] .dot{background:var(--up)}
-@media(max-width:640px){.hdr-nav{width:100%}.tabs{flex:1}.tab{flex:1;text-align:center;padding:8px 6px}}
+
+/* 外部模块（指数看盘）：iframe 必须有确定高度，否则全屏应用会塌陷成 0 */
+.ext{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;position:relative}
+.ext>iframe{display:block;width:100%;height:min(78vh,880px);border:0;background:var(--bg)}
+.ext .extload{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+  color:var(--tx2);font-size:13px;gap:10px}
+.ext .extload.on{display:flex}
+.extops{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 10px}
+.extops .hint{color:var(--tx2);font-size:12px;flex:1;min-width:180px}
+
+@media(max-width:900px){
+  .shell{grid-template-columns:minmax(0,1fr);column-gap:0;
+    grid-template-areas:"hdr" "nav" "main" "foot"}
+  /* margin 负值把横条拉满整宽（抵消 body 的 20px 左右内边距），否则两侧会露白 */
+  .sidenav{position:sticky;top:0;z-index:30;flex-direction:row;align-items:center;gap:8px;
+    background:var(--bg);margin:0 -20px;padding:8px 20px;border-bottom:1px solid var(--line);
+    box-shadow:0 6px 14px -10px rgba(0,0,0,.95)}
+  .tabs{flex-direction:row;flex:1;padding:3px}
+  .tab{flex:1;justify-content:center;text-align:center;padding:8px 6px}
+  .ext>iframe{height:min(70vh,680px)}
+}
 
 /* ---------- 通用控件 ---------- */
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px}
@@ -210,20 +243,25 @@ footer a:hover{color:var(--tx)}
 <body>
 <a class="skip" href="#picks">跳到利润断层选股平台</a>
 <div class="wrap">
+<div class="shell">
   <header>
     <div style="flex:1;min-width:260px">
       <h1>个人投资<span>工作台</span></h1>
       <div class="sub" id="meta"></div>
     </div>
-    <nav class="hdr-nav" aria-label="分页切换">
-      <div class="tabs" role="tablist">
-        <button type="button" class="tab" id="tabCal" role="tab" aria-selected="true" aria-controls="pgCal"><span class="dot"></span>投资日历</button>
-        <button type="button" class="tab" id="tabPk" role="tab" aria-selected="false" aria-controls="pgPicks"><span class="dot"></span>利润断层选股平台</button>
-      </div>
-      <!-- 本页是「首页概览」，K 线 / 散点图 / 板块全景仍在完整看板里，入口必须显眼 -->
-      <a class="btn" id="goFull" href="利润断层工作台.html">完整看板（含 K 线）</a>
-    </nav>
+    <!-- 本页是「首页概览」，K 线 / 散点图 / 板块全景仍在完整看板里，入口必须显眼 -->
+    <a class="btn" id="goFull" href="利润断层工作台.html">完整看板（含 K 线）</a>
   </header>
+
+  <!-- 三个页卡：投资日历（主页）/ 指数看盘 / 利润断层。
+       桌面靠左竖排；≤900px 由 CSS 折叠成顶部固定横条（三个等宽按钮常驻可见）。 -->
+  <nav class="sidenav" aria-label="分页切换">
+    <div class="tabs" role="tablist" aria-orientation="vertical">
+      <button type="button" class="tab" id="tabCal" role="tab" aria-selected="true" aria-controls="pgCal"><span class="dot"></span>投资日历</button>
+      <button type="button" class="tab" id="tabIdx" role="tab" aria-selected="false" aria-controls="pgIdx"><span class="dot"></span>指数看盘</button>
+      <button type="button" class="tab" id="tabPk" role="tab" aria-selected="false" aria-controls="pgPicks"><span class="dot"></span>利润断层</button>
+    </div>
+  </nav>
 
   <main>
     <!-- ============ 分页 1：投资日历 ============ -->
@@ -247,7 +285,24 @@ footer a:hover{color:var(--tx)}
       <div class="evlist" id="dList"></div>
     </section>
 
-    <!-- ============ 分页 2：利润断层选股平台 ============ -->
+    <!-- ============ 分页 2：指数看盘（外部模块 · 独立部署） ============
+         与看板里的「指数看盘」模块指向同一个已部署应用。
+         iframe 走懒加载：src 在首次切到本页时才写入（见 showPage），
+         否则首屏要多等一个 117 KB 的外部应用才能看到日历。 -->
+    <section id="pgIdx" role="tabpanel" aria-labelledby="tabIdx" hidden>
+      <div class="extops">
+        <span class="hint">外部模块 · 数据由该应用自行更新；读数不新时点「重新加载」。</span>
+        <a class="btn" id="idxNew" href="https://global-market-dashboard-68975.app.workbuddy.host/" target="_blank" rel="noopener noreferrer">新窗口打开</a>
+        <button type="button" class="btn" id="idxReload">重新加载</button>
+      </div>
+      <div class="ext">
+        <iframe id="idxFrame" title="指数看盘" referrerpolicy="no-referrer-when-downgrade"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads"></iframe>
+        <div class="extload" id="idxLoad"><span>正在加载指数看盘…</span></div>
+      </div>
+    </section>
+
+    <!-- ============ 分页 3：利润断层选股平台 ============ -->
     <section id="pgPicks" role="tabpanel" aria-labelledby="tabPk" hidden>
       <div class="tools">
         <label for="pFrom">断层日期</label>
@@ -291,6 +346,7 @@ footer a:hover{color:var(--tx)}
     <div>本报告仅供研究参考，不构成个人投资建议。</div>
   </footer>
 </div>
+</div>
 
 <script type="application/json" id="cal-payload">__CAL__</script>
 <script type="application/json" id="pk-payload">__PK__</script>
@@ -310,32 +366,61 @@ const pad = n => (n<10?"0":"")+n;
 const ymd = d => d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
 const today = (CAL.meta && CAL.meta.today) || ymd(new Date());
 
-/* ===================== 分页切换（保持选中状态） =====================
-   双写：localStorage 记住「下次打开还是这一页」，hash 支持书签直达/分享。
-   优先级：URL hash > localStorage > 默认「投资日历」。 */
+/* ===================== 分页切换 =====================
+   三个页卡：投资日历（主页）/ 指数看盘 / 利润断层。
+   首屏固定落在「投资日历」——2026-10-06 用户明确要求「主页设置为投资日历」，
+   所以兜底是硬编码的 HOME，不再读 localStorage 的「上次看到哪一页」：
+   手机上若带着上次的 picks 记忆值打开，第一眼看到的就不是主页，
+   用户会以为页卡又不见了（这正是本次报障的现象）。直达/分享仍走 URL hash。 */
 const PAGES = {calendar:{tab:"tabCal", pg:"pgCal", hash:"#calendar"},
+               indices:{tab:"tabIdx", pg:"pgIdx", hash:"#indices"},
                picks:{tab:"tabPk",  pg:"pgPicks", hash:"#picks"}};
-const LSKEY = "pgwb.page";
+const HOME = "calendar";
+const IDX_URL = "https://global-market-dashboard-68975.app.workbuddy.host/";
+const on = (id, fn) => { const el = $(id); if(el) el.addEventListener("click", fn); };
 
 function showPage(name, push){
-  if(!PAGES[name]) name = "calendar";
+  if(!PAGES[name]) name = HOME;
   Object.keys(PAGES).forEach(k=>{
-    const p = PAGES[k];
-    $(p.tab).setAttribute("aria-selected", k===name ? "true":"false");
-    $(p.pg).hidden = (k!==name);
+    const p = PAGES[k], t = $(p.tab), g = $(p.pg);
+    // null 守卫：负向测试会把整个页卡摘掉，直接 .setAttribute 抛 TypeError 会让脚本
+    // 崩在中间，后面的断言等于没跑（check_calendar.js 实测吃过这个亏）。
+    if(t) t.setAttribute("aria-selected", k===name ? "true":"false");
+    if(g) g.hidden = (k!==name);
   });
-  try{ localStorage.setItem(LSKEY, name); }catch(e){}
   if(push !== false){
     try{ history.replaceState(null, "", PAGES[name].hash); }catch(e){}
   }
   // 切到选股平台时按需渲染一次即可（数据不变，重复渲染没意义但也不贵）
   if(name==="picks") renderPicks();
+  if(name==="indices") loadIdx();
 }
-$("tabCal").addEventListener("click", ()=>showPage("calendar"));
-$("tabPk").addEventListener("click", ()=>showPage("picks"));
+
+/* 指数看盘 iframe 懒加载：首屏不去拉那个 117 KB 的外部应用，只有真正切到本页才写 src。
+   已加载过就不再重写 src（重写会把页面里的月份选择、滚动位置一并重置），
+   只有点「重新加载」才带 _r= 时间戳强刷。 */
+function loadIdx(bust){
+  const f = $("idxFrame");
+  if(!f) return;
+  if(f.getAttribute("src") && !bust) return;
+  const box = $("idxLoad");
+  if(box){
+    box.classList.add("on");
+    // load 有可能因为对端拒绝嵌入而永远不来，用 once 监听 + 兜底文案，别让遮罩挂死
+    f.addEventListener("load", ()=>box.classList.remove("on"), { once:true });
+  }
+  f.setAttribute("src", bust
+    ? IDX_URL + (IDX_URL.indexOf("?")>=0 ? "&" : "?") + "_r=" + Date.now()
+    : IDX_URL);
+}
+on("tabCal", ()=>showPage("calendar"));
+on("tabIdx", ()=>showPage("indices"));
+on("tabPk",  ()=>showPage("picks"));
+on("idxReload", ()=>loadIdx(true));
 window.addEventListener("hashchange", ()=>{
   const h = location.hash;
   if(h==="#picks") showPage("picks", false);
+  else if(h==="#indices") showPage("indices", false);
   else if(h==="#calendar") showPage("calendar", false);
 });
 
@@ -603,12 +688,12 @@ $("pReset").addEventListener("click", ()=>{
   renderDay();
   renderPicks();
 
-  // 分页：URL hash 优先，其次 localStorage 记住的上次选择
+  // 分页：URL hash 直达/分享优先；无 hash 一律落在主页「投资日历」
   let want = null;
   if(location.hash === "#picks") want = "picks";
+  else if(location.hash === "#indices") want = "indices";
   else if(location.hash === "#calendar") want = "calendar";
-  if(!want){ try{ want = localStorage.getItem(LSKEY); }catch(e){} }
-  showPage(want || "calendar");
+  showPage(want || HOME);
 })();
 </script>
 </body>
