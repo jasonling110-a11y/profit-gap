@@ -90,6 +90,49 @@ console.log("[1] 结构与可用性");
      /noopener/.test(($("idxNew") || {}).rel || "") &&
      /^https:\/\/global-market-dashboard-68975\.app\.workbuddy\.host\//.test(
        attrOf(doc, "idxNew", "href") || ""));
+  /* ---- 2026-10-06：三个页卡默认直接内嵌「完整应用」---------------------------------
+     用户要求「点击页卡后直接展示完整页面，无需多余的中间跳转」：
+       · 投资日历 → 完整日历（市场日历应用，自带「笔记」与「艾丽的总结」）
+       · 指数看盘 → 完整指数看盘应用（原本就是）
+       · 利润断层 → 完整看板（K 线弹窗 / 散点图 / 板块全景 / 核心断层区）
+     自建月历与自建选股表都保留，只是默认隐藏（用户明确说「不得删改」）。
+     下面这几条是结构前提；「切过去才拉 src」与「切视图是否摘 src」在 [11] 里动态验。 */
+  ok("日历 / 利润断层页各有内嵌 iframe（完整应用）", !!$("calFrame") && !!$("pkFrame"));
+  // 懒加载 = 首屏只拉「当前页卡」那一个 iframe。默认页是投资日历，所以 calFrame 该有 src，
+  // 而另外两个（指数看盘 / 利润断层）必须是空的 —— 首屏白等两个几 MB 的外部应用才是 bug。
+  ok("首屏只拉当前页卡的 iframe：指数看盘 / 利润断层仍无 src",
+     !attrOf(doc, "idxFrame", "src") && !attrOf(doc, "pkFrame", "src") &&
+     /^https:\/\/market-calendar-71280\.app\.workbuddy\.host\//.test(attrOf(doc, "calFrame", "src") || ""),
+     "idx=" + attrOf(doc, "idxFrame", "src") + " pk=" + attrOf(doc, "pkFrame", "src"));
+  // 云笔记要走它自己那个源的登录流程，sandbox 必须放行弹窗 / 模态 / 同源 / 表单，
+  // 少一个 allow-same-origin，笔记的云端读写就会静默失效。
+  ok("日历 iframe 的 sandbox 放行脚本/同源/表单/弹窗/模态（云笔记登录要用）", (() => {
+     const sb = attrOf(doc, "calFrame", "sandbox") || "";
+     return ["allow-scripts", "allow-same-origin", "allow-forms", "allow-popups", "allow-modals"]
+       .every(x => sb.includes(x));
+  })(), attrOf(doc, "calFrame", "sandbox"));
+  ok("日历页默认 = 完整日历（工作台月历默认隐藏）",
+     attrOf(doc, "calVFull", "aria-pressed") === "true" &&
+     attrOf(doc, "calVIn", "aria-pressed") === "false" &&
+     hiddenOf(doc, "calExt") === false && hiddenOf(doc, "calIn") === true);
+  ok("利润断层页默认 = 完整看板（工作台清单默认隐藏）",
+     attrOf(doc, "pkVFull", "aria-pressed") === "true" &&
+     attrOf(doc, "pkVIn", "aria-pressed") === "false" &&
+     hiddenOf(doc, "pkExt") === false && hiddenOf(doc, "pkIn") === true);
+  ok("视图切换按钮复用现成的 .btn / .btn.on（不引第二套配色）",
+     !!doc.querySelector(".viewsw #calVFull.btn") && !!doc.querySelector(".viewsw #calVIn.btn") &&
+     !!doc.querySelector(".viewsw #pkVFull.btn") && !!doc.querySelector(".viewsw #pkVIn.btn"));
+  ok("视图切换是一组 radio 语义（role=group + aria-pressed，不是裸 div）",
+     !!doc.querySelector('.viewsw[role="group"][aria-label]'));
+  /* 用户说「务必保持原有笔记与『艾丽的总结』功能不变，不得删改」。
+     自建月历 / 自建选股表只是默认 hidden，节点一行没删 —— 存在性反向断言。 */
+  ok("工作台自建月历仍在（默认隐藏 != 删除）",
+     !!$("calIn") && !!$("calIn").querySelector("#mGrid") && !!$("calIn").querySelector("#dList") &&
+     !!$("calIn").querySelector("#mPrev") && !!$("calIn").querySelector("#mToday") &&
+     !!$("calIn").querySelector("#mLabel"));
+  ok("工作台自建选股表仍在（默认隐藏 != 删除）",
+     !!$("pkIn") && !!$("pkIn").querySelector("#pTbl") && !!$("pkIn").querySelector("#pBody") &&
+     !!$("pkIn").querySelector("#pFrom") && !!$("pkIn").querySelector("#pSum"));
   ok("日历页骨架：月切按钮 / 月标签 / 网格 / 事件列表",
      !!$("mPrev") && !!$("mNext") && !!$("mToday") && !!$("mLabel") && !!$("mGrid") && !!$("dList"));
   ok("选股页骨架：区间 / 快捷 / 搜索 / 重置 / 表体 / 汇总",
@@ -102,8 +145,17 @@ console.log("[1] 结构与可用性");
   ok("表格有 caption（无障碍）", !!doc.querySelector("#pTbl caption"));
   ok("跳转主看板的链接可达",
      !!Array.from(doc.querySelectorAll("footer a")).find(a => a.getAttribute("href") === "利润断层工作台.html"));
-  ok("页头有显眼的「完整看板」入口（K 线/散点图都在那边）",
-     ($("goFull") || {}).getAttribute && $("goFull").getAttribute("href") === "利润断层工作台.html");
+  /* 2026-10-06 用户要求「评估『查看完整 K 线图』这一入口的必要性，并调整为点击页卡后
+     直接展示完整页面，无需多余的中间跳转」。三个页卡现在都直接内嵌完整应用，页头那个
+     「完整看板（含 K 线）」(#goFull → 利润断层工作台.html) 就成了多余的中间跳转 —— 已删除。
+     这是反向断言：谁把它加回来，这里必须先红。 */
+  ok("页头的「完整看板（含 K 线）」中间跳转入口已删除",
+     !$("goFull") && !/id="goFull"/.test(html) && !/完整看板（含 K 线）<\/a>/.test(html));
+  // 替代入口：每个页卡自己的工具栏里留「新窗口打开」，需要独立大屏时仍可一键直达。
+  ok("日历 / 利润断层页各自给出「新窗口打开」（顶替被删的页头入口）",
+     attrOf(doc, "calNew", "href") === "https://market-calendar-71280.app.workbuddy.host/" &&
+     attrOf(doc, "pkNew", "href") === "利润断层工作台.html" &&
+     /noopener/.test(($("calNew") || {}).rel || "") && /noopener/.test(($("pkNew") || {}).rel || ""));
   ok("市场日历外链带 rel=noopener",
      Array.from(doc.querySelectorAll("footer a")).some(a => a.href === CAL_URL && /noopener/.test(a.rel || "")));
   ok("含免责声明", /不构成个人投资建议/.test(doc.body.textContent));
@@ -543,6 +595,9 @@ console.log("\n[10] 响应式与安全");
      /\.ext>iframe\{[^}]*height:min\(/.test(style));
   ok("外部模块加载遮罩有 on 态", /\.ext \.extload\{[\s\S]*?\}\s*\.ext \.extload\.on\{display:flex\}/.test(style) ||
      /\.ext\.extload\.on\{display:flex\}/.test(style) || /\.extload\.on\{display:flex\}/.test(style));
+  // 工具栏窄屏必须让说明独占整行：否则 375px 下说明被挤成一根三行窄柱（实测截图确认）。
+  ok("≤900px 工具栏说明独占整行（不被挤成窄柱）",
+     /@media\(max-width:900px\)\{[\s\S]*?\.extops \.hint\{[^}]*order:9[^}]*flex:1 1 100%/.test(style));
   // 月历网格必须用 minmax(0,1fr)：用 1fr 时列的最小宽度是 min-content，
   // 320px 屏上「日号 + 事件数」会把网格顶宽 → 页面横向溢出（实测溢出 36 个节点）。
   ok("月历网格列可压缩（minmax(0,1fr)，防极窄屏横向溢出）",
@@ -559,6 +614,107 @@ console.log("\n[10] 响应式与安全");
      TYPES.every((_, i) => new RegExp("--t" + (i % 7) + ":").test(style)), TYPES.join("/"));
   ok("沿用主看板深色变量（--bg/--up/--down）",
      /--bg:#0d1117/.test(style) && /--up:#f0483e/.test(style) && /--down:#22a06b/.test(style));
+}
+
+/* ================= 11. 页卡内视图切换（完整应用 ⇄ 工作台内建） =================
+   2026-10-06 新增：每个页卡默认内嵌完整应用，另留一个「工作台内建视图」可切。
+   这一节盯住三件事：
+     a) 首屏只写**当前页卡**的 iframe src（另外两个保持懒加载）；
+     b) 切到内建视图时**真的摘掉** iframe 的 src（不是只隐藏），否则几 MB 的应用还在后台跑；
+     c) 内建视图里的月历 / 选股表照常可用（用户要求「不得删改」）。
+   注意 b)：只断言 src「为空」是测不出问题的 —— 得数 removeAttribute('src') 的调用次数，
+   否则「压根没写进去」和「写进去又摘掉」这两种状态看起来一模一样（pitfall：见 SKILL.md 19，
+   同源问题的正向版本）。 */
+console.log("\n[11] 页卡内视图切换");
+{
+  const { window: w, doc } = boot();
+  const $ = (id) => doc.getElementById(id);
+  const srcOf = (id) => attrOf(doc, id, "src");
+
+  ok("首屏只写当前页卡的 iframe src（日历已拉，看板还没）",
+     /^https:\/\/market-calendar-71280\.app\.workbuddy\.host\//.test(srcOf("calFrame") || "") &&
+     !srcOf("pkFrame"),
+     "calFrame=" + srcOf("calFrame") + " / pkFrame=" + srcOf("pkFrame"));
+
+  // --- 日历页：完整应用 ⇄ 工作台月历 ---
+  const counter = (id) => {
+    const f = $(id);
+    if (!f) return { n: () => -1, restore: () => {} };
+    let n = 0;
+    const orig = f.removeAttribute.bind(f);
+    f.removeAttribute = function (a) { if (a === "src") n++; return orig(a); };
+    return { n: () => n, restore: () => { f.removeAttribute = orig; } };
+  };
+
+  const calC = counter("calFrame");
+  click(w, $("calVIn"));
+  ok("切到「工作台月历」：内建视图显示、完整应用隐藏",
+     hiddenOf(doc, "calIn") === false && hiddenOf(doc, "calExt") === true);
+  ok("切到「工作台月历」：按钮态互换（aria-pressed + .on）",
+     attrOf(doc, "calVIn", "aria-pressed") === "true" &&
+     attrOf(doc, "calVFull", "aria-pressed") === "false" &&
+     $("calVIn").classList.contains("on") && !$("calVFull").classList.contains("on"));
+  ok("切到「工作台月历」：确实摘掉了 iframe src（不只是隐藏）",
+     calC.n() === 1 && !srcOf("calFrame"),
+     "removeAttribute('src') 次数=" + calC.n() + " src=" + srcOf("calFrame"));
+  calC.restore();
+
+  // 内建月历在切进来之后必须仍然能点、能渲染
+  ok("内建月历切进来后仍可用（网格与事件列表都在）",
+     doc.querySelectorAll("#mGrid .cell").length > 0 && !!$("dList"));
+  click(w, $("mToday"));
+  ok("内建月历切进来后「今天」仍能响应", /年\d+月/.test($("mLabel").textContent), $("mLabel").textContent);
+
+  click(w, $("calVFull"));
+  ok("切回「完整日历」：src 恢复、完整应用重新显示",
+     hiddenOf(doc, "calExt") === false && hiddenOf(doc, "calIn") === true &&
+     /^https:\/\/market-calendar-71280\.app\.workbuddy\.host\//.test(srcOf("calFrame") || ""),
+     srcOf("calFrame"));
+  ok("切回时不带缓存戳（保持可复现，只有「重新加载」才强刷）",
+     !/_r=/.test(srcOf("calFrame") || ""), srcOf("calFrame"));
+
+  // --- 利润断层页：切过去才拉它的 iframe ---
+  click(w, $("tabPk"));
+  ok("切到利润断层页才写 pkFrame 的 src（非当前页卡一律懒加载）",
+     srcOf("pkFrame") === "利润断层工作台.html", srcOf("pkFrame"));
+
+  const pkC = counter("pkFrame");
+  click(w, $("pkVIn"));
+  ok("切到「工作台清单」：选股表显示、完整看板隐藏",
+     hiddenOf(doc, "pkIn") === false && hiddenOf(doc, "pkExt") === true);
+  ok("切到「工作台清单」：确实摘掉了 iframe src",
+     pkC.n() === 1 && !srcOf("pkFrame"), "removeAttribute('src') 次数=" + pkC.n());
+  pkC.restore();
+  ok("内建选股表切进来后仍可用（7 列表头 + 行渲染）",
+     doc.querySelectorAll("#pkIn #pTbl th[data-k]").length === 7 &&
+     $("pkIn").querySelectorAll("#pBody tr").length > 0);
+  click(w, $("pkVFull"));
+  ok("切回「完整看板」：src 恢复",
+     /^利润断层工作台\.html/.test(srcOf("pkFrame") || "") && hiddenOf(doc, "pkExt") === false,
+     srcOf("pkFrame"));
+
+  // --- 「重新加载」强刷：加时间戳绕缓存 ---
+  click(w, $("tabCal"));
+  click(w, $("calReload"));
+  ok("日历「重新加载」加时间戳强刷（绕缓存）",
+     /^https:\/\/market-calendar-71280\.app\.workbuddy\.host\/\?_r=\d+$/.test(srcOf("calFrame") || ""),
+     srcOf("calFrame"));
+  click(w, $("tabPk"));
+  click(w, $("pkReload"));
+  ok("看板「重新加载」加时间戳强刷",
+     /^利润断层工作台\.html\?_r=\d+$/.test(srcOf("pkFrame") || ""), srcOf("pkFrame"));
+
+  // --- 两个页卡的视图态互不串扰 ---
+  ok("两个页卡的视图态互相独立（切走再回来不串）",
+     hiddenOf(doc, "calExt") === false && hiddenOf(doc, "calIn") === true &&
+     hiddenOf(doc, "pkExt") === false && hiddenOf(doc, "pkIn") === true);
+
+  // --- 加载遮罩：真实浏览器里 load 会到，但 jsdom 不会发 load，所以这里只断言
+  //     「遮罩容器存在且带着对应应用的名字」，避免负向测试把它整块摘掉还全绿。 ---
+  ok("日历 / 看板各有加载遮罩，且文案标明是哪个应用",
+     !!$("calLoad") && !!$("pkLoad") &&
+     /完整日历/.test($("calLoad").textContent) && /完整看板/.test($("pkLoad").textContent),
+     JSON.stringify($("calLoad").textContent) + " / " + JSON.stringify($("pkLoad").textContent));
 }
 
 console.log("\n----------------------------");
