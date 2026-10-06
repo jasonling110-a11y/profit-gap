@@ -277,7 +277,7 @@ console.log("\n[6] 利润断层选股平台 · 字段");
   ok("默认区间 = 全量（不隐藏任何个股）", dataTrs.length === ROWS.length,
      dataTrs.length + " / " + ROWS.length);
   ok("每行 6 个单元格", dataTrs.every(t => t.children.length === 6));
-  ok("每格带 data-label（窄屏转卡片用）",
+  ok("每格带 data-label（列名基线；窄屏已改为真表格，该属性留作兜底）",
      dataTrs.every(t => Array.from(t.children).every(td => td.dataset.label)));
   ok("首列含股票名称与代码",
      /<b>/.test(body.innerHTML) && /<code>/.test(body.innerHTML));
@@ -425,8 +425,14 @@ console.log("\n[10] 响应式与安全");
   const style = (html.match(/<style>([\s\S]*?)<\/style>/) || [, ""])[1];
   ok("有 820px 断点（隐藏格子文案）", /@media\(max-width:820px\)/.test(style));
   ok("有 560px 断点", /@media\(max-width:560px\)/.test(style));
-  ok("窄屏表格转卡片（thead 隐藏 + data-label 前缀）",
-     /table thead\{display:none\}/.test(style) && /td:before\{content:attr\(data-label\)/.test(style));
+  // 窄屏策略 2026-10-06 由「转竖排卡片」改为「保留真表格 + 横向滚动 + 名称列吸附」：
+  // 卡片版一只股票占 6 行、一屏只看得到两三只，用户实测后要求「像电脑端一样做一个完整的列表」。
+  // 这两条是反向断言——一旦有人把 td:before/thead 隐藏那套写回来，这里必须失败。
+  ok("窄屏保留真表格（不再转竖排卡片）",
+     !/table thead\{display:none\}/.test(style) && !/td:before\{content:attr\(data-label\)/.test(style));
+  ok("窄屏选股表「名称 / 代码」列吸附左侧（横向滑动不迷失）",
+     /#pTbl td:first-child\{position:sticky;left:0/.test(style));
+  ok("窄屏选股表字号收紧到 12px（一行一只仍可读）", /#pTbl\{font-size:12px\}/.test(style));
   ok("标签栏在窄屏铺满", /\.tabs\{flex:1\}/.test(style));
   // 月历网格必须用 minmax(0,1fr)：用 1fr 时列的最小宽度是 min-content，
   // 320px 屏上「日号 + 事件数」会把网格顶宽 → 页面横向溢出（实测溢出 36 个节点）。

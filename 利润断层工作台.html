@@ -194,13 +194,34 @@ footer{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);color:v
   .bar .nm{grid-area:nm}
   .bar .track{grid-area:track}
   .bar .num{grid-area:num;text-align:right}
-  #tbl thead{display:none}
-  #tbl,#tbl tbody,#tbl tr,#tbl td{display:block;width:100%}
-  #tbl tr{border-bottom:1px solid var(--line);padding:8px 2px}
-  #tbl td{border:none;white-space:normal;padding:2px 0;display:flex;justify-content:space-between;gap:10px;text-align:right}
-  #tbl td:before{content:attr(data-label);color:var(--tx2);font-size:12px;text-align:left;flex:none}
-  #tbl td.l{text-align:right}
-  #tbl td[data-label="K线"]{display:none}
+  /* 断层清单：窄屏【不再】把 21 列摊成 20 行「标签 : 值」。
+     摊开之后一只股票就要占满一整屏（2026-10-06 用户实测反馈「一格格太大」），
+     清单根本没法扫——手机上一屏只能看一只，等于没有列表。
+     改为与电脑端**同一张真表格**：一行一只、字号收紧，横向滑动看其余列；
+     代码 / 名称两列吸附在左侧，滑到右边看指标时也不会忘了在看谁；
+     容器内不再纵向滚动（去掉 max-height），整份清单跟着页面一起滚 —— 这才是「完整的列表」。
+     注：#stbl（板块全景）本来就是这个行为，两表在窄屏下从此一致。 */
+  #list>.tblwrap{max-height:none;overscroll-behavior-x:contain}
+  #tbl{font-size:12px}
+  #tbl th,#tbl td{padding:6px 8px}
+  /* K 线列在窄屏隐藏（点整行就开 K 线弹窗，这个按钮是冗余的）。
+     ⚠️ th 与 td 必须**同时**隐藏：只藏 td 的话，thead 仍是 21 格、tbody 只剩 20 格，
+     表体每格会左移一列 —— 表头写「K线」、底下却是代码（2026-10-06 截图实测踩到）。
+     用 th.ns 而不是 th:first-child：列的语义是「K 线列」，别绑死在位置上。 */
+  #tbl th.ns,#tbl td[data-label="K线"]{display:none}
+  #tbl th:nth-child(2),#tbl td:nth-child(2),
+  #tbl th:nth-child(3),#tbl td:nth-child(3){position:sticky}
+  #tbl th:nth-child(2),#tbl td:nth-child(2){left:0;width:64px;min-width:64px}
+  #tbl th:nth-child(3),#tbl td:nth-child(3){left:64px;width:96px;min-width:96px;
+    box-shadow:7px 0 7px -7px rgba(0,0,0,.85)}
+  #tbl tbody td:nth-child(2),#tbl tbody td:nth-child(3){background:var(--bg);z-index:2}
+  #tbl thead th:nth-child(2),#tbl thead th:nth-child(3){z-index:3}
+  #tbl tbody tr:hover td:nth-child(2),#tbl tbody tr:hover td:nth-child(3),
+  #tbl tbody tr:focus-within td:nth-child(2),#tbl tbody tr:focus-within td:nth-child(3){background:var(--panel2)}
+  /* 类型色条原本画在 td:first-child（K 线列）上，窄屏该列被隐藏 → 改画到第一个可见列，
+     否则「预告 / 快报 / 财报」三类的观感区分会在手机上消失 */
+  #tbl tbody tr.k-warn>td:nth-child(2){box-shadow:inset 3px 0 0 rgba(217,161,59,.75)}
+  #tbl tbody tr.k-info>td:nth-child(2){box-shadow:inset 3px 0 0 rgba(79,140,201,.7)}
 }
 @media(prefers-reduced-motion:reduce){
   *,*:before,*:after{animation:none!important;transition:none!important}

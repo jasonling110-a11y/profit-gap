@@ -65,6 +65,11 @@ setTimeout(() => {
     'CSS reduced-motion': /prefers-reduced-motion/.test(html) ? '有' : '无',
     'payload 走 JSON.parse': /JSON\.parse\(document\.getElementById\("wb-payload"\)/.test(html) ? '是' : '否',
     'payload 内已转义 <': /\\u003c/.test(html) ? '是' : '否',
+    // ---- 窄屏清单布局（2026-10-06 用户反馈「一格格太大」后由「摊成 20 行卡片」改为「真表格」）----
+    // 这三条是反向断言：谁把那套 display:block + td:before 写回来，自检必须失败。
+    '窄屏清单仍是真表格': /#tbl td:before\{content:attr\(data-label\)/.test(html) ? '否' : '是',
+    '窄屏清单吸附代码/名称列': /#tbl td:nth-child\(2\)\{left:0/.test(html) && /#tbl td:nth-child\(3\)\{left:64px/.test(html) ? '是' : '否',
+    '窄屏清单容器无内滚动': /#list>\.tblwrap\{max-height:none/.test(html) ? '是' : '否',
   };
   // 连续断层期数列
   const si = Array.from(qa('#tbl thead th')).findIndex(t => t.dataset.k === 'streak');
@@ -561,6 +566,10 @@ setTimeout(() => {
   if (out['CSS reduced-motion'] !== '有') bad.push('CSS 缺少 prefers-reduced-motion 支持');
   if (out['payload 走 JSON.parse'] !== '是') bad.push('数据未通过 JSON.parse 注入');
   if (out['payload 内已转义 <'] !== '是') bad.push('注入数据未转义 "<"，仍存在 </script> 截断白屏风险');
+  // ---- 窄屏清单布局（反向断言：摊成卡片的写法一旦回来就失败）----
+  if (out['窄屏清单仍是真表格'] !== '是') bad.push('窄屏清单又被摊成「标签 : 值」卡片（一只股票占满一屏，手机没法扫清单）');
+  if (out['窄屏清单吸附代码/名称列'] !== '是') bad.push('窄屏清单缺少吸附的代码/名称列（横向滑动时会不知道在看哪只）');
+  if (out['窄屏清单容器无内滚动'] !== '是') bad.push('窄屏清单容器仍有 max-height 内滚动，整份列表没有跟页面一起滚');
   if (out['连续期数列序号'] < 0) bad.push('清单缺少「连续期数」列');
   if (!out['连续期数合法']) bad.push('连续期数列取值非法：' + JSON.stringify(out['连续期数取值(去重)']));
   if (out['连续期数非零条数'] === 0) bad.push('连续期数列全部为 0 / —，疑似未取到数据');
@@ -624,4 +633,8 @@ setTimeout(() => {
 
   console.log(bad.length ? '❌ 未通过：' + bad.join('、') : '✅ 自检通过');
   dom.window.close();
+  // 退出码必须反映结果：check_home.js / check_calendar.js 都是这么做的，
+  // 只有本脚本原来无论如何都退 0 —— 负向测试（故意退回产品逻辑）于是只能靠人眼看输出，
+  // 自动化里也永远「绿」。2026-10-06 补齐。
+  process.exit(bad.length ? 1 : 0);
 }, 2000);

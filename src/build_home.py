@@ -179,13 +179,21 @@ footer a:hover{color:var(--tx)}
   .ev .tag{justify-self:start}
   .btn,.chip{padding:6px 9px}
   .tools{gap:6px}
-  /* 表格转卡片 */
-  table thead{display:none}
-  table,tbody,tr,td{display:block;width:100%}
-  tr{border-bottom:1px solid var(--line);padding:9px 4px}
-  td{border:none;padding:2px 0;text-align:left;white-space:normal;display:flex;justify-content:space-between;gap:10px}
-  td:before{content:attr(data-label);color:var(--tx2);font-size:12px}
-  td.num{text-align:right}
+  /* 选股表：窄屏【不再】转成「标签 : 值」竖排卡片 ——
+     那样一只股票要占 6 行、一屏只能看两三只（2026-10-06 用户实测反馈「一格格太大」）。
+     改为与电脑端**同一张真表格**：一行一只、字号收紧，横向滑动看
+     「断层日期 / 断层幅度 / 当日涨跌幅 / 成交量 / 所属行业」；
+     「名称 / 代码」吸附在左侧，滑到右边看行业时也不会忘了在看哪只。 */
+  #pTbl{font-size:12px}
+  #pTbl th,#pTbl td{padding:7px 9px}
+  #pTbl thead th:first-child{position:sticky;left:0;background:var(--panel);z-index:3;
+    width:132px;min-width:132px}
+  #pTbl td:first-child{position:sticky;left:0;background:var(--bg);z-index:2;
+    width:132px;min-width:132px;white-space:normal;
+    box-shadow:7px 0 7px -7px rgba(0,0,0,.85)}
+  /* .stk 是 flex，默认 nowrap：窄屏不换行的话「核心池·双断层」标签会横向顶出去 */
+  #pTbl td:first-child .stk{flex-wrap:wrap;row-gap:2px}
+  #pTbl tbody tr:hover td:first-child{background:var(--panel2)}
 }
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}html{scroll-behavior:auto}}
 /* 极窄屏（≤380px，如 iPhone SE 一代）：格子里放不下「日号 + 事件数」两段，
