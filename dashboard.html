@@ -301,6 +301,15 @@ footer{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);color:v
   .cal-bar .t em{display:none}
   .cal-bar{padding-left:10px;padding-right:10px}
   .cal-btn{padding:6px 9px}
+  /* 触屏没有 Esc 键，这个提示只在有实体键盘的宽屏才有意义 */
+  .kbd-hint{display:none}
+}
+/* ≤420px：模块栏有 4 个按钮（新窗口/刷新数据/重试/关闭），320px 下 flex:1 的标题
+   被挤得只剩一个点（2026-10-06 截图实测）。让标题独占一行、按钮换行，按钮再收一档。 */
+@media(max-width:420px){
+  .cal-bar{flex-wrap:wrap;row-gap:6px;padding-bottom:6px}
+  .cal-bar .t{flex:1 1 100%}
+  .cal-btn{padding:5px 9px;font-size:12px}
 }
 </style>
 </head>
@@ -316,6 +325,7 @@ footer{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);color:v
       <div class="hdr-tabs">
         <button type="button" class="hdr-tab" id="tabHome" aria-current="true"><span class="dot"></span>利润断层</button>
         <button type="button" class="hdr-tab" id="tabCal" aria-current="false"><span class="dot"></span>交易日历</button>
+        <button type="button" class="hdr-tab" id="tabIdx" aria-current="false"><span class="dot"></span>指数看盘</button>
       </div>
       <a class="cal-btn" id="goHome" href="个人投资工作台.html">工作台首页</a>
       <a class="cal-btn" id="calNew" href="https://market-calendar-71280.app.workbuddy.host/" target="_blank" rel="noopener noreferrer">新窗口打开</a>
@@ -432,25 +442,31 @@ footer{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);color:v
   </div>
 </div>
 
-<!-- ===== 交易日历 · 外部模块（iframe 嵌入 + 全屏覆盖层）====================
+<!-- ===== 外部模块（iframe 嵌入 + 全屏覆盖层）· 交易日历 / 指数看盘 ==========
      role=dialog + aria-modal：读屏可识别，Esc 关闭，焦点锁在层内。
-     关闭时会摘掉 iframe 的 src —— 让它彻底停止活动，两个模块互不干扰
+     关闭时会摘掉 iframe 的 src —— 让它彻底停止活动，多个模块互不干扰
      （不抢定时器、不抢滚动、不占后台网络）。
+
+     2026-10-06 从「交易日历单模块」泛化为多模块（MODS 注册表）：
+     同一套壳 + 同一套 CSS 服务 N 个外部站点，只换 url / 标题 / tab / 深链。
+     复制第二套 DOM 的做法会让样式与交互慢慢分叉，所以选择参数化。
+     初始文案与 href 保持 = 交易日历（默认模块），便于首屏静态可读。
      ================================================================== -->
 <div id="calMask"></div>
 <section id="calShell" role="dialog" aria-modal="true" aria-labelledby="calTitle" tabindex="-1">
   <header class="cal-bar">
     <span class="t" id="calTitle">交易日历<em>外部模块 · 独立部署</em></span>
     <a class="cal-btn" id="calNewBar" href="https://market-calendar-71280.app.workbuddy.host/" target="_blank" rel="noopener noreferrer">新窗口</a>
+    <button type="button" class="cal-btn" id="calRefresh" title="强制重新拉取（绕过浏览器缓存）">刷新数据</button>
     <button type="button" class="cal-btn" id="calRetry">重试</button>
-    <button type="button" class="cal-btn" id="calClose">关闭 (Esc)</button>
+    <button type="button" class="cal-btn" id="calClose">关闭<span class="kbd-hint"> (Esc)</span></button>
   </header>
   <div class="cal-stage">
     <iframe id="calFrame" title="交易日历" referrerpolicy="no-referrer-when-downgrade"
       sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads"></iframe>
-    <div class="cal-wrap" id="calLoad"><div class="cal-spin"></div><span>正在加载交易日历…</span></div>
+    <div class="cal-wrap" id="calLoad"><div class="cal-spin"></div><span id="calLoadMsg">正在加载交易日历…</span></div>
     <div class="cal-wrap" id="calFb" role="alert">
-      <h3>交易日历加载失败</h3>
+      <h3 id="calFbTitle">交易日历加载失败</h3>
       <p id="calFbMsg"></p>
       <div class="ops">
         <button type="button" class="cal-btn" id="calFbRetry">重试</button>
@@ -1571,51 +1587,86 @@ function applyHash(){
 window.addEventListener("hashchange", applyHash);
 applyHash();
 
-/* ================= 交易日历 · 外部模块 ==================================
-   集成方式：iframe 嵌入 + 全屏覆盖层。
-   为什么选它而不是「源码级合并 / 内联」：
-     1) 日历是独立部署的三端应用（本机工作台 / GitHub Pages / WorkBuddy 云端，
-        还带微信小程序与云函数后端），有自己的发布链路；合并等于每次它更新
-        都要重新对齐一遍，且违反「两个模块可独立访问、互不干扰」。
-     2) 它是 body{overflow:hidden} + .app{height:100dvh} 的全屏应用，
-        内联进本页文档流没有确定高度。
-     3) 远端已实测不返回 X-Frame-Options / CSP frame-ancestors，允许被嵌入。
-   预留升级位：把 CAL.mode 改成 "api"，并让 calLoad() 改为取数自行渲染，
-   下面这层 UI 与交互一行都不用动；#calendar 深链就是将来做独立路由的接缝。
+/* ================= 外部模块（交易日历 / 指数看盘）=======================
+   集成方式：iframe 嵌入 + 全屏覆盖层 + MODS 注册表。
+   为什么用 iframe 而不是「源码级合并 / 内联」：
+     1) 两个模块都是独立部署的应用，各有自己的发布链路（交易日历：本机工作台 /
+        GitHub Pages / WorkBuddy 云端 / 微信小程序；指数看盘：WorkBuddy 云端）；
+        合并等于每次它们更新都要重新对齐一遍，也违反「各模块可独立访问、互不干扰」。
+     2) 两者都是全屏应用（body{overflow:hidden} + 100dvh），内联进本页文档流
+        没有确定高度，要么塌陷要么被窄容器挤爆。
+     3) 远端已实测均不返回 X-Frame-Options / CSP frame-ancestors，允许被嵌入。
+   2026-10-06：从「交易日历单模块」泛化为注册表驱动。新增一个外部模块只需往
+   MODS 里加一条 + 在 header 加一个 .hdr-tab，DOM / CSS / 交互逻辑都不用动。
+   预留升级位：把 mode 改成 "api" 并让 load 改为取数自行渲染，下面 UI 一行都不用动。
    ======================================================================= */
 ;(function(){
-  var CAL = {
-    mode: "iframe",                                   // "iframe"（当前）| "api"（预留）
-    url:  "https://market-calendar-71280.app.workbuddy.host/",
-    timeout: 12000                                    // ms，超时后给兜底 UI
-  };
   function calEl(id){ return document.getElementById(id); }
   var shell = calEl("calShell"), mask = calEl("calMask"), frame = calEl("calFrame"),
-      loadBox = calEl("calLoad"), fb = calEl("calFb"), fbMsg = calEl("calFbMsg"),
-      tabHome = calEl("tabHome"), tabCal = calEl("tabCal");
+      loadBox = calEl("calLoad"), fb = calEl("calFb"), fbMsg = calEl("calFbMsg");
   if(!shell || !frame) return;
 
-  var timer = null, loaded = false, lastFocus = null;
+  /* 外部模块注册表。name 同时用于标题 / iframe title / 加载与失败文案，
+     所以改文案只改这一处。timeout 给指数看盘放宽到 15s —— 它单文件 117 KB、
+     要跑完 20 个指数的 SVG 渲染，首屏比日历重。 */
+  var MODS = {
+    cal: { key:"cal", tab:"tabCal", name:"交易日历", hash:"#calendar", timeout:12000,
+           url:"https://market-calendar-71280.app.workbuddy.host/" },
+    idx: { key:"idx", tab:"tabIdx", name:"指数看盘", hash:"#indices",  timeout:15000,
+           url:"https://global-market-dashboard-68975.app.workbuddy.host/" }
+  };
+  var NEWWIN = ["calNew", "calNewBar", "calFbNew"].map(calEl).filter(Boolean);
+  var loadMsg = calEl("calLoadMsg"), fbTitle = calEl("calFbTitle");
+
+  var timer = null, loaded = false, lastFocus = null, cur = null;
 
   function isOpen(){ return shell.classList.contains("on"); }
   function show(node, v){ if(node) node.classList.toggle("on", !!v); }
-  function setTab(isCal){
-    if(tabCal)  tabCal.setAttribute("aria-current", isCal ? "true" : "false");
-    if(tabHome) tabHome.setAttribute("aria-current", isCal ? "false" : "true");
+  /* setTab(null) = 回到本页（利润断层）；否则只有该模块的 tab 处于选中态。
+     必须遍历全部 tab 而不是只切两个，否则第三个模块会出现「两个 tab 同时亮」。 */
+  function setTab(key){
+    var home = calEl("tabHome");
+    if(home) home.setAttribute("aria-current", key ? "false" : "true");
+    Object.keys(MODS).forEach(function(k){
+      var el = calEl(MODS[k].tab);
+      if(el) el.setAttribute("aria-current", k === key ? "true" : "false");
+    });
   }
   function setHash(h){ try { history.replaceState(null, "", h); } catch(e){} }
   function fail(msg){ show(loadBox, false); if(fbMsg) fbMsg.textContent = msg; show(fb, true); }
+  /* 缓存穿透：同一个 URL 反复加载时浏览器可能直接给缓存，读数就不新了。
+     只在「刷新数据」按钮里加参数，首屏与重试仍用原 URL（保持可复现、便于测试）。 */
+  function bust(u){ return u + (u.indexOf("?") >= 0 ? "&" : "?") + "_r=" + Date.now(); }
 
-  function calLoad(){
+  /* 把这一层 UI 的整体文案切到某个模块。切模块时标题/链接/iframe title
+     必须一起换，否则会留下「写着交易日历、里头是指数看盘」的错位。 */
+  function applyMod(m){
+    if(loadMsg) loadMsg.textContent = "正在加载" + m.name + "…";
+    if(fbTitle) fbTitle.textContent = m.name + "加载失败";
+    frame.setAttribute("title", m.name);
+    NEWWIN.forEach(function(a){ a.setAttribute("href", m.url); });
+    var t = calEl("calTitle");
+    if(t){
+      t.textContent = "";                        // 清掉旧标题（含尾部 em）
+      t.appendChild(document.createTextNode(m.name));
+      var em = document.createElement("em");
+      em.textContent = "外部模块 · 独立部署";
+      t.appendChild(em);
+    }
+  }
+
+  function loadMod(useBust){
+    var m = cur;                                   // 捕获当前模块：超时回调里 cur 可能已变
+    if(!m) return;
     loaded = false;
     show(fb, false); show(loadBox, true);
     if(timer) clearTimeout(timer);
     timer = setTimeout(function(){
       if(!loaded){
-        fail("加载超时（超过 " + (CAL.timeout / 1000) + " 秒）。可能是网络较慢，或浏览器按第三方站点策略限制了嵌入。可重试，或直接在新窗口打开——功能完全一致。");
+        fail("加载超时（超过 " + (m.timeout / 1000) + " 秒）。可能是网络较慢，或浏览器按第三方站点策略限制了嵌入。可重试，或直接在新窗口打开——功能完全一致。");
       }
-    }, CAL.timeout);
-    frame.src = CAL.url;
+    }, m.timeout);
+    frame.src = useBust ? bust(m.url) : m.url;
   }
 
   frame.addEventListener("load", function(){
@@ -1637,44 +1688,61 @@ applyHash();
   frame.addEventListener("error", function(){
     loaded = true;
     if(timer) clearTimeout(timer);
-    fail("网络异常，无法加载交易日历。请检查网络后重试。");
+    fail("网络异常，无法加载" + (cur ? cur.name : "该模块") + "。请检查网络后重试。");
   });
 
-  function calOpen(){
-    if(isOpen()) return;
-    lastFocus = document.activeElement;
+  /* 打开指定模块。已经在同一模块上再点一次：不重载（避免把用户的操作状态冲掉）。
+     换模块时：文案/链接跟着换 → 重新加载 → 深链替换，#calendar 与 #indices 不会共存。 */
+  function openMod(key){
+    var m = MODS[key];
+    if(!m) return;
+    var same = isOpen() && cur === m;
+    if(!same){
+      lastFocus = document.activeElement;
+      cur = m;
+      applyMod(m);
+    }
     shell.classList.add("on");
     if(mask) mask.classList.add("on");
     document.body.style.overflow = "hidden";
-    setTab(true);
-    if(!frame.getAttribute("src")) calLoad();
+    setTab(m.key);
+    if(!same || !frame.getAttribute("src")) loadMod(false);
     var c = calEl("calClose"); if(c) c.focus();
-    setHash("#calendar");
+    setHash(m.hash);
   }
-  function calClose(){
+  function closeMod(){
     if(!isOpen()) return;
     shell.classList.remove("on");
     if(mask) mask.classList.remove("on");
     document.body.style.overflow = "";
-    setTab(false);
+    setTab(null);
     if(timer) clearTimeout(timer);
     show(loadBox, false); show(fb, false);
     frame.removeAttribute("src");              // 彻底停掉，避免后台继续跑
+    cur = null;
     setHash(location.pathname + location.search);
     if(lastFocus && lastFocus.focus) lastFocus.focus();
   }
 
-  if(tabCal)  tabCal.addEventListener("click", calOpen);
-  if(tabHome) tabHome.addEventListener("click", function(){ calClose(); window.scrollTo({top:0, behavior:"smooth"}); });
-  if(mask)    mask.addEventListener("click", calClose);
-  [["calClose","calClose"],["calRetry","calLoad"],["calFbRetry","calLoad"]].forEach(function(p){
+  Object.keys(MODS).forEach(function(k){
+    var el = calEl(MODS[k].tab);
+    if(el) el.addEventListener("click", function(){ openMod(k); });
+  });
+  var tabHome = calEl("tabHome");
+  if(tabHome) tabHome.addEventListener("click", function(){ closeMod(); window.scrollTo({top:0, behavior:"smooth"}); });
+  if(mask)    mask.addEventListener("click", closeMod);
+  [["calClose","close"],["calRetry","load"],["calFbRetry","load"],["calRefresh","refresh"]].forEach(function(p){
     var el = calEl(p[0]);
     if(!el) return;
-    el.addEventListener("click", p[1] === "calClose" ? calClose : calLoad);
+    el.addEventListener("click", function(){
+      if(p[1] === "close") closeMod();
+      else if(p[1] === "refresh") loadMod(true);    // 强制绕过缓存，拿最新数据
+      else loadMod(false);
+    });
   });
 
   document.addEventListener("keydown", function(e){
-    if((e.key === "Escape" || e.key === "Esc") && isOpen()){ e.preventDefault(); calClose(); }
+    if((e.key === "Escape" || e.key === "Esc") && isOpen()){ e.preventDefault(); closeMod(); }
   });
   // 精简焦点陷阱：Tab 只在覆盖层内循环，不会跑到背后的清单表格去
   shell.addEventListener("keydown", function(e){
@@ -1686,12 +1754,21 @@ applyHash();
     else if(!e.shiftKey && document.activeElement === last){ e.preventDefault(); first.focus(); }
   });
 
+  /* 深链 → 模块：遍历注册表而不是硬编码两个 if，新增模块时这里不用改。
+     无模块深链却开着 → 关掉（手工改地址栏离开模块时不会卡在覆盖层）。 */
+  function modForHash(h){
+    var hit = null;
+    Object.keys(MODS).forEach(function(k){ if(h === MODS[k].hash) hit = k; });
+    return hit;
+  }
   function calSyncHash(){
-    if(location.hash === "#calendar"){ calOpen(); }
-    else if(isOpen()){ calClose(); }
+    var k = modForHash(location.hash);
+    if(k) openMod(k);
+    else if(isOpen()) closeMod();
   }
   window.addEventListener("hashchange", calSyncHash);
-  if(location.hash === "#calendar") calOpen();
+  var boot = modForHash(location.hash);
+  if(boot) openMod(boot);
 })();
 </script>
 </body>
