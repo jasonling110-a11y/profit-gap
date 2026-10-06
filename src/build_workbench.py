@@ -42,6 +42,7 @@ html{scroll-behavior:smooth}
 ::-webkit-scrollbar-thumb:hover{background:#4c5764}
 body{background:var(--bg);color:var(--tx);font:13px/1.6 -apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;padding:22px 20px 60px}
 .wrap{max-width:1320px;margin:0 auto}
+@media(min-width:1440px){.wrap{max-width:1440px}}
 .skip{position:absolute;left:-9999px;top:0;background:var(--panel2);border:1px solid var(--ctl);color:var(--tx);padding:8px 14px;border-radius:0 0 8px 0;z-index:99}
 .skip:focus{left:0}
 header{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px;padding-bottom:14px;border-bottom:1px solid var(--line)}
@@ -65,7 +66,8 @@ details>summary em{font-style:normal;color:var(--tx2);font-size:12px;font-weight
 details>summary:hover{color:var(--tx)}
 details>*:not(summary){margin-top:10px}
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(184px,1fr));gap:10px}
-.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:13px 15px}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:13px 15px;transition:border-color .2s}
+.kpi:hover{border-color:var(--line2)}
 .kpi .k{color:var(--tx2);font-size:13px}
 .kpi .v{font-size:24px;font-weight:600;font-variant-numeric:tabular-nums;margin-top:4px;line-height:1.25}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
@@ -132,9 +134,17 @@ tbody tr:focus-within{background:var(--panel2)}
 .bar .fillC{background:rgba(240,72,62,.85);height:100%}
 .bar .fillW{background:rgba(79,140,201,.5);height:100%}
 .bar .num{font-size:12px;color:var(--tx2);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
-.modal{position:fixed;inset:0;background:rgba(5,8,12,.72);display:none;align-items:center;justify-content:center;padding:20px;z-index:50}
+.modal{position:fixed;inset:0;background:rgba(5,8,12,.72);display:none;align-items:center;justify-content:center;padding:14px;z-index:50;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
 .modal.on{display:flex}
-.mbox{background:var(--panel);border:1px solid var(--line2);border-radius:12px;width:100%;max-width:760px;max-height:92vh;overflow:auto;padding:16px 18px 18px}
+/* K 线优先：弹窗纵向 flex，图表区 flex:1 占满剩余可视高度。
+   图表上方只留标题 + 紧凑指标条，其余信息一律下沉到图表之后；
+   空间不足时先压缩信息区，永远不压缩图表（.chartbox 有 min-height 兜底）。 */
+.mbox{background:var(--panel);border:1px solid var(--line2);border-radius:14px;box-shadow:0 24px 64px rgba(0,0,0,.55);width:100%;max-width:min(1180px,96vw);height:min(94vh,880px);display:flex;flex-direction:column;overflow:hidden;padding:14px 16px 16px}
+.mbody{flex:1;min-height:0;display:flex;flex-direction:column;overflow:auto;overscroll-behavior:contain}
+@media(max-width:620px),(max-height:620px){
+  .modal{padding:0}
+  .mbox{max-width:100%;height:100vh;height:100dvh;max-height:100vh;max-height:100dvh;border-radius:0;border-left:0;border-right:0}
+}
 .mhead{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:4px}
 .mhead h3{font-size:16px;font-weight:600}
 .mhead .code{color:var(--tx3);font-size:12px;font-weight:400;margin-left:6px}
@@ -145,12 +155,16 @@ tbody tr:focus-within{background:var(--panel2)}
 .mnavbtn:hover:not(:disabled){color:var(--tx);border-color:var(--info);background:rgba(79,140,201,.14)}
 .mnavbtn:disabled{opacity:.32;cursor:not-allowed}
 .mpos{color:var(--tx3);font-size:12px;font-variant-numeric:tabular-nums;min-width:58px;text-align:center}
-.msub{color:var(--tx2);font-size:13px;margin-bottom:10px;line-height:1.9}
-.mmetrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:7px;margin:10px 0}
-.mmetrics div{background:var(--panel2);border-radius:7px;padding:7px 9px}
-.mmetrics .k{color:var(--tx2);font-size:12px}
-.mmetrics .v{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
-.chartbox{position:relative;background:#111721;border:1px solid var(--line);border-radius:9px;padding:6px;user-select:none;overscroll-behavior:contain}
+.msub{color:var(--tx2);font-size:13px;margin-bottom:6px;line-height:1.8}
+/* 指标条：一行紧凑 chips，取代原来占掉图表高度的 11 格卡片网格 */
+.mchips{display:flex;flex-wrap:wrap;gap:5px;margin:0 0 9px;flex:none}
+.mchips span{display:inline-flex;align-items:baseline;gap:4px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:2px 8px;font-size:12px;color:var(--tx2);white-space:nowrap;font-variant-numeric:tabular-nums}
+.mchips b{color:var(--tx);font-weight:600}
+.mchips b.up{color:var(--up)} .mchips b.down{color:var(--down)} .mchips b.mut{color:var(--tx3)}
+.chartbox{position:relative;background:#111721;border:1px solid var(--line);border-radius:9px;padding:6px;user-select:none;overscroll-behavior:contain;flex:1 1 auto;min-height:260px;display:flex;flex-direction:column}
+/* 图表容器高度交给 flex 决定，SVG 绝对定位铺满 —— SVG 尺寸永远不会反向影响容器高度（避免布局循环） */
+#mChart{position:relative;flex:1;min-height:0}
+#mChart>svg{position:absolute;inset:0;width:100%;height:100%;display:block}
 /* pan-y：横向手势交给 JS 平移 K 线，纵向滑动仍交给浏览器滚动弹窗内容（避免图表「卡住」页面）；
    同时不授予 pinch-zoom，双指捏合才能被 pointer 事件拿到用于缩放 */
 .chartbox svg{touch-action:pan-y;cursor:crosshair}
@@ -376,17 +390,19 @@ footer{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);color:v
         <button class="mclose" id="mClose" aria-label="关闭 K 线图">×</button>
       </div>
     </div>
-    <div class="mmetrics" id="mMetrics"></div>
-    <div id="mStreak"></div>
-    <div id="mHist"></div>
-    <div class="krange" id="mRange" role="group" aria-label="K 线回顾区间"></div>
-    <div class="chartbox" id="chartbox">
-      <div id="mChart"></div>
-      <div class="tip" id="tip" role="status" aria-live="polite"></div>
+    <div class="mchips" id="mChips"></div>
+    <div class="mbody">
+      <div class="chartbox" id="chartbox">
+        <div id="mChart"></div>
+        <div class="tip" id="tip" role="status" aria-live="polite"></div>
+      </div>
+      <div class="legend" id="mLegend"></div>
+      <div class="krange" id="mRange" role="group" aria-label="K 线回顾区间"></div>
+      <div id="mStreak"></div>
+      <div id="mHist"></div>
+      <div id="mTags" style="margin-top:10px"></div>
+      <div id="mNote" style="margin-top:8px"></div>
     </div>
-    <div class="legend" id="mLegend"></div>
-    <div id="mTags" style="margin-top:10px"></div>
-    <div id="mNote" style="margin-top:8px"></div>
   </div>
 </div>
 
@@ -933,7 +949,15 @@ function drawChart(r){
   const start = end - win;
   const raw = (start===0 && end===avail) ? kd.bars : kd.bars.slice(start, end);
   const dts = KL_DATES.slice(kd.d0+start, kd.d0+end);
-  const W=680,H=402,P={l:44,r:56,t:14,b:20}, VH=66, GAPV=16;
+  /* viewBox 宽高比随容器实测尺寸走，SVG 铺满容器且不变形；
+     测不到（jsdom / 弹窗尚未布局）时退回 680×402，坐标计算照常成立。
+     -12 = .chartbox 上下左右各 6px 内边距；#mChart 由 flex 撑满，尺寸不依赖 SVG。 */
+  const _cb = document.getElementById("chartbox");
+  const _cw = _cb ? Math.round(_cb.clientWidth) - 12 : 0;
+  const _ch = _cb ? Math.round(_cb.clientHeight) - 12 : 0;
+  const W = (_cw >= 320) ? _cw : 680;
+  const H = (_ch >= 240) ? _ch : 402;
+  const P={l:44,r:56,t:14,b:20}, VH=Math.max(46,Math.round(H*0.17)), GAPV=14;
   const priceH = H-P.t-P.b-VH-GAPV;
   const n = raw.length;
   CVST = {avail:avail, win:win, start:start, end:end};
@@ -947,7 +971,7 @@ function drawChart(r){
   const y = p => P.t + (pmax-p)/(pmax-pmin)*priceH;
   CVST.bw = bw; CVST.P = P; CVST.W = W;
   const vy = v => P.t+priceH+GAPV + (VH - v/vmax*VH);
-  let s = "<svg viewBox='0 0 "+W+" "+H+"' width='100%' role='img' aria-label='"+esc(r.name+" K线图，含成交量与 MA5/10/20 均线")+"' style='display:block'>";
+  let s = "<svg viewBox='0 0 "+W+" "+H+"' width='100%' height='100%' role='img' aria-label='"+esc(r.name+" K线图，含成交量与 MA5/10/20 均线")+"' style='display:block'>";
   s += "<rect x='"+P.l+"' y='"+P.t+"' width='"+(W-P.l-P.r)+"' height='"+priceH+"' fill='#0e141c' rx='6'/>";
   s += "<rect x='"+P.l+"' y='"+(P.t+priceH+GAPV)+"' width='"+(W-P.l-P.r)+"' height='"+VH+"' fill='#0e141c' rx='6'/>";
   for(let i=0;i<=4;i++){
@@ -1154,6 +1178,20 @@ document.getElementById("mRange").addEventListener("click", e=>{
 /* ---------- 同花顺式直接操作：滚轮缩放 / 拖动平移 / 捏合 / 双击回到最新 ---------- */
 const chartBox = document.getElementById("chartbox");
 const ptrs = new Map();
+
+/* 容器尺寸变化（窗口缩放 / 旋转 / 弹窗开合）后按新尺寸重绘，保证 viewBox 与容器同比、图表不变形。
+   只建一个 observer 并复用（重复创建会泄漏）；去抖 120ms；弹窗关闭时不重绘。 */
+let chartRO = null, chartROTimer = null;
+if(typeof ResizeObserver === "function"){
+  chartRO = new ResizeObserver(()=>{
+    if(!chartStock) return;
+    const m = document.getElementById("modal");
+    if(!m || !m.classList.contains("on")) return;
+    if(chartROTimer) clearTimeout(chartROTimer);
+    chartROTimer = setTimeout(()=>{ if(chartStock) drawChart(chartStock); }, 120);
+  });
+  chartRO.observe(chartBox);
+}
 let dragState = null;      /* {x, base}  base = 按下时的右端下标（拖动全程以它为基准，避免累计误差） */
 let pinchState = null;     /* {dist, win, start} */
 
@@ -1261,7 +1299,8 @@ function openKline(code, keep){
     kindTag(r.source)+" "+r.announce+" 公告 · "+esc(r.tier||"—")+" · 评分 <b>"+fmt(r.score,1)+"</b>"+
     (r.gap_state ? (" · <span class='warnc'>"+esc(r.gap_state)+"</span>") : "")+
     (r.growth_basis?(" · 增速口径 "+esc(r.growth_basis)):"");
-  document.getElementById("mMetrics").innerHTML = [
+  /* 11 项指标压成一行 chips：信息一个不丢，但不再占掉图表高度 */
+  document.getElementById("mChips").innerHTML = [
     ["增速", fmt(r.growth,1)+"%", "up"],
     ["口径", r.growth_basis||"—", ""],
     ["加速度", fmt(r.accel,1)+"pct", cls(r.accel)],
@@ -1273,7 +1312,7 @@ function openKline(code, keep){
     ["回补日", (g.valid&&g.filled)?(g.fill_date||"—"):"—", ""],
     ["缺口后涨幅", fmt(g.ret_since_gap,2)+"%", cls(g.ret_since_gap)],
     ["流通市值", money(g.mcap), ""]
-  ].map(x=>"<div><div class='k'>"+x[0]+"</div><div class='v "+x[2]+"'>"+x[1]+"</div></div>").join("");
+  ].map(x=>"<span>"+x[0]+"<b class='"+x[2]+"'>"+x[1]+"</b></span>").join("");
   document.getElementById("mStreak").innerHTML = streakLine(r);
   document.getElementById("mHist").innerHTML = histLine(r);
   document.getElementById("mTags").innerHTML = (r.tags||[]).map(t=>"<span class='tag'>"+esc(t)+"</span>").join("")+
@@ -1283,10 +1322,16 @@ function openKline(code, keep){
   CHART_WIN = autoWin(r);/* 连续多期断层的个股自动放宽到能看见最早那一期，单期个股仍是最新 120 根 */
   dragging = false;
   chartBox.classList.remove("dragging");
-  drawChart(r);
+  /* 必须先让弹窗可见再画图：隐藏时容器实测宽高为 0，动态 viewBox 会退化成兜底值 */
   modal.classList.add("on");
   document.body.style.overflow = "hidden";
+  drawChart(r);
   buildNav(code);
+  /* 首帧布局完成后按真实容器尺寸重绘一次（ResizeObserver 也会兜底触发） */
+  requestAnimationFrame(()=>{
+    const m = document.getElementById("modal");
+    if(m && m.classList.contains("on") && chartStock===r) drawChart(r);
+  });
   if(wasOpen){
     const box = modal.querySelector(".mbox");
     if(box && typeof box.scrollTo === "function") box.scrollTo(0,0); else if(box) box.scrollTop = 0;

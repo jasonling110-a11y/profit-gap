@@ -78,7 +78,7 @@ setTimeout(() => {
     row.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
     out['弹窗已打开'] = q('#modal').classList.contains('on');
     out['弹窗标题'] = (q('#mTitle').textContent || '').slice(0, 24);
-    out['弹窗指标格数'] = qa('#mMetrics > div').length;
+    out['弹窗指标格数'] = qa('#mChips > span').length;
     out['K线图形元素'] = qa('#mChart rect').length;
     out['均线路径数'] = qa('#mChart path').length;
     out['图例项'] = qa('#mLegend span').length;
@@ -177,7 +177,7 @@ setTimeout(() => {
   const streakRow = Array.from(qa('#tbl tbody tr')).find(tr => /^\d+ 期$/.test(siTxt(tr)));
   if (streakRow) {
     streakRow.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
-    out['弹窗指标格数'] = qa('#mMetrics > div').length;
+    out['弹窗指标格数'] = qa('#mChips > span').length;
     out['弹窗序列条'] = qa('#mStreak .streakline .cell').length;
     out['弹窗标题'] = (q('#mTitle').textContent || '').slice(0, 24);
     d.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
