@@ -89,6 +89,14 @@ tbody tr:focus-within{background:var(--panel2)}
 /* 混排后靠左侧色条再区分一次，扫清单时不用逐行读标签 */
 #tbl tbody tr.k-warn>td:first-child{box-shadow:inset 3px 0 0 rgba(217,161,59,.75)}
 #tbl tbody tr.k-info>td:first-child{box-shadow:inset 3px 0 0 rgba(79,140,201,.7)}
+/* 核心断层区（核心池·双断层的子集）：独立一张窄表，不与主清单抢列。
+   默认按「连续断层期数」降序，连续期数越长越靠前 —— 这一区的看点就是「连续」两个字。 */
+#core .tblwrap{max-height:none}
+#ctbl{font-size:13px}
+#ctbl tbody tr{cursor:pointer}
+#ctbl tbody tr.k-warn>td:first-child{box-shadow:inset 3px 0 0 rgba(217,161,59,.75)}
+#ctbl tbody tr.k-info>td:first-child{box-shadow:inset 3px 0 0 rgba(79,140,201,.7)}
+#ctbl code{color:var(--tx3);font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 .tag.good{color:var(--down);border-color:rgba(34,160,107,.5);background:var(--downbg)}
 .tag.streak{color:var(--acc);border-color:rgba(99,168,136,.55);background:rgba(99,168,136,.12)}
 .kbtn{background:var(--panel2);border:1px solid var(--ctl);color:var(--tx2);border-radius:6px;padding:2px 8px;font-size:12px}
@@ -222,6 +230,17 @@ footer{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);color:v
      否则「预告 / 快报 / 财报」三类的观感区分会在手机上消失 */
   #tbl tbody tr.k-warn>td:nth-child(2){box-shadow:inset 3px 0 0 rgba(217,161,59,.75)}
   #tbl tbody tr.k-info>td:nth-child(2){box-shadow:inset 3px 0 0 rgba(79,140,201,.7)}
+  /* 核心断层区：窄屏同样一行一只 + 首列（名称/代码）吸附。
+     8 列在 375px 里放不下，横向滑即可；「连续断层」列紧随首列，一滑就到，
+     不用像主清单那样翻过行业/板块/公告日才看得到。 */
+  #ctbl{font-size:12px}
+  #ctbl th,#ctbl td{padding:6px 8px}
+  #ctbl th:first-child,#ctbl td:first-child{position:sticky;left:0;background:var(--bg);z-index:2;
+    min-width:120px;box-shadow:7px 0 7px -7px rgba(0,0,0,.85)}
+  #ctbl thead th:first-child{background:var(--panel);z-index:3}
+  #ctbl tbody tr:hover td:first-child{background:var(--panel2)}
+  #ctbl tbody tr.k-warn>td:first-child{box-shadow:inset 3px 0 0 rgba(217,161,59,.75),7px 0 7px -7px rgba(0,0,0,.85)}
+  #ctbl tbody tr.k-info>td:first-child{box-shadow:inset 3px 0 0 rgba(79,140,201,.7),7px 0 7px -7px rgba(0,0,0,.85)}
 }
 @media(prefers-reduced-motion:reduce){
   *,*:before,*:after{animation:none!important;transition:none!important}
@@ -307,6 +326,13 @@ footer{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);color:v
     <section id="overview">
       <h2>概览</h2>
       <div class="kpis" id="kpis"></div>
+    </section>
+
+    <section id="core">
+      <h2>核心断层区<em id="ccnt"></em></h2>
+      <div class="tblwrap"><table id="ctbl">
+        <caption class="sr-only">核心断层区：业绩正增长且出现有效跳空的「核心池·双断层」个股，按连续断层期数降序；点击行可查看 K 线图</caption>
+        <thead></thead><tbody></tbody></table></div>
     </section>
 
     <section id="list">
@@ -529,11 +555,24 @@ document.getElementById("meta").innerHTML =
   "覆盖报告期："+(meta.period_labels||[]).join(" / ")+" · 公告日期窗口："+
   (meta.window_label || (meta.window_start+" 起 "+meta.window_days+" 天"));
 
-/* 概览：3 个主指标，只给数字。红=强（业绩正增长），绿=弱（业绩没跟上的仅价格缺口）。 */
+/* 连续断层期数的数值口径：null / undefined = 「没有数据」，用 -1 排到最后。
+   不能把缺失当成 0 —— 0 是「有历史数据但本期不达标」，两者含义不同（沿用 cmpRows 的缺失值沉底思路）。 */
+function streakN(r){ return (typeof r.streak === "number") ? r.streak : -1; }
+
+/* 核心断层区 = 核心池·双断层（本期净利润同比为正 + 有效跳空）= 整份清单里最该盯的那一小撮。
+   默认按「连续断层期数」降序、再看评分：连续期数越长说明这份业绩断层越扎实，
+   不是一两期的偶发跳空 —— 这一区的看点就是「连续」两个字。 */
+const CORE = ALLROWS.filter(r=>r.tier && r.tier.indexOf("核心")===0)
+  .sort((a,b)=> (streakN(b)-streakN(a)) || ((b.score||0)-(a.score||0)));
+/* 「连续断层 ≥2 期」的只数（口径 = 核心池内 streak ≥ 2；单期断层不算「连续」）。 */
+const STREAK2 = CORE.filter(r=>streakN(r)>=2).length;
+
+/* 概览：4 个主指标，只给数字。红=强（业绩正增长），绿=弱（业绩没跟上的仅价格缺口）。 */
 const kpi = [
   {k:"清单个股", v:ALLROWS.length, c:""},
   {k:"业绩正增长", v:sum.core, c:"up"},
-  {k:"仅价格缺口", v:sum.price_only, c:"down"}
+  {k:"仅价格缺口", v:sum.price_only, c:"down"},
+  {k:"连续断层 ≥2 期", v:STREAK2, c:"up"}
 ];
 document.getElementById("kpis").innerHTML = kpi.map(x=>
   "<div class='kpi'><div class='k'>"+x.k+"</div><div class='v "+x.c+"'>"+x.v+"</div></div>").join("");
@@ -845,6 +884,57 @@ function render(){
     }).join("")+"</tr>";
   }).join("");
   /* 行的点击 / 回车 / 行内 K 线按钮统一交给 initDelegation() 的事件委托 */
+}
+
+/* 核心断层区：一张窄表，只列核心池。
+   列序刻意让「连续断层」紧跟名称 —— 窄屏横滑时它第一个出现，
+   不用像主清单那样先翻过行业 / 板块 / 公告日才看得到（那正是「连续断层怎么没了」的由来）。 */
+const CCOLS = [
+  {k:"name",     t:"名称 / 代码", l:1},
+  {k:"source",   t:"类型",        l:1},
+  {k:"streak",   t:"连续断层",    l:1},
+  {k:"gap",      t:"跳空%"},
+  {k:"growth",   t:"增速%"},
+  {k:"score",    t:"评分"},
+  {k:"fill",     t:"缺口",        l:1},
+  {k:"announce", t:"公告日",      l:1}
+];
+function coreZone(){
+  /* 区块缺失时直接退出，不要让 null 抛出去把启动链后面的 cards() 一起带崩
+     —— 负向测试里摘掉 #core 时真的发生过：一个 null.querySelector 让散点点击、
+     排序、翻页全部失效，排查成本远高于这一行守卫。 */
+  const t = document.getElementById("ctbl");
+  if(!t) return;
+  const head = t.querySelector("thead"), tb = t.querySelector("tbody");
+  head.innerHTML = "<tr>"+CCOLS.map(c=>"<th scope='col' class='"+(c.l?"l":"")+"'>"+c.t+"</th>").join("")+"</tr>";
+  document.getElementById("ccnt").textContent =
+    "核心池·双断层 "+CORE.length+" 只 · 连续断层 ≥2 期 "+STREAK2+" 只";
+  if(!CORE.length){
+    tb.innerHTML = "<tr><td class='empty' colspan='"+CCOLS.length+"'>本轮没有核心池个股</td></tr>";
+    return;
+  }
+  tb.innerHTML = CORE.map(r=>{
+    const g = r.gap || {};
+    const kind = KIND[r.source] ? KIND[r.source].cls : "plain";
+    /* 缺口列口径与主清单一致：有 gap_state（预告池）优先用它，否则按行情推断 */
+    const fill = r.gap_state
+      ? (r.gap_state==="已回补" ? "<span class='mut'>已回补</span>" : "<span class='warnc'>尚未跳空</span>")
+      : (!r.gap ? "—" : (r.gap.valid
+          ? (r.gap.filled ? "<span class='mut'>已回补</span>" : "<span class='up'>未回补</span>")
+          : "<span class='mut'>未跳空</span>"));
+    const st = Math.max(streakN(r), 0);
+    return "<tr data-code='"+esc(r.code)+"' class='k-"+kind+"' tabindex='0' aria-label='"+
+      esc(r.name+" "+r.code+"（"+(r.source||"")+"），连续断层 "+st+" 期，按回车查看 K 线图")+"'>"+
+      "<td class='l'><b>"+esc(r.name)+"</b> <code>"+esc(r.code)+"</code></td>"+
+      "<td class='l'>"+kindTag(r.source)+"</td>"+
+      "<td class='l'>"+streakCell(r)+"</td>"+
+      "<td><span class='"+cls(g.gap_vs_close)+"'>"+pct(g.gap_vs_close).replace("%","")+"</span></td>"+
+      "<td><span class='"+cls(r.growth)+"'>"+fmt(r.growth,1)+"</span></td>"+
+      "<td><b>"+fmt(r.score,1)+"</b></td>"+
+      "<td class='l'>"+fill+"</td>"+
+      "<td class='l'>"+esc(r.announce||"—")+"</td>"+
+      "</tr>";
+  }).join("");
 }
 
 /* 连续断层期数：列表单元格（期数 + 悬浮显示单季同比序列） */
@@ -1434,6 +1524,20 @@ function initDelegation(){
     e.preventDefault(); openKline(c.dataset.code);
   });
 
+  /* 核心断层区：与主清单同一套交互（点行 / 回车开 K 线）。
+     同样加 null 守卫：这一层若抛异常，下面散点那段的委托就永远注册不上。 */
+  const ctbl = document.getElementById("ctbl");
+  if(ctbl) {
+    ctbl.querySelector("tbody").addEventListener("click", e=>{
+      const el = e.target.closest("[data-code]");
+      if(el) openKline(el.dataset.code);
+    });
+    ctbl.querySelector("tbody").addEventListener("keydown", e=>{
+      if(e.key!=="Enter" && e.key!==" ") return;
+      if(e.target.dataset && e.target.dataset.code){ e.preventDefault(); openKline(e.target.dataset.code); }
+    });
+  }
+
   /* 断层强度分布的气泡：点一下直接打开该股 K 线。
      容器只在初始化时取一次，scatter() 只换 innerHTML、容器本身不重建，委托长期有效。 */
   const scBox = document.getElementById("scatter");
@@ -1443,7 +1547,7 @@ function initDelegation(){
   });
 }
 
-scatter(); sectorBars(); renderSectors(); fillOptions(); render(); cards();
+scatter(); sectorBars(); renderSectors(); fillOptions(); render(); coreZone(); cards();
 initDelegation();
 ["q","find","fboard","fsrc","ftier"].forEach(id=>{ const el=document.getElementById(id); el.addEventListener("input",render); el.addEventListener("change",render); });
 document.getElementById("fsort").addEventListener("change", e=>{ if(e.target.value) setSort(e.target.value, false); });

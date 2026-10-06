@@ -269,6 +269,7 @@ footer a:hover{color:var(--tx)}
               <th class="l" id="thName" data-k="n">股票名称 / 代码</th>
               <th data-k="d" id="thDate">断层日期</th>
               <th data-k="g" class="on" id="thGap" aria-sort="descending">断层幅度</th>
+              <th data-k="s" id="thStreak">连续断层</th>
               <th data-k="dc" id="thDc">当日涨跌幅</th>
               <th data-k="v" id="thVol">成交量</th>
               <th class="l" id="thInd" data-k="i" style="text-align:left">所属行业</th>
@@ -510,6 +511,13 @@ function renderPicks(){
     +     (r.tier?'<span class="tier">'+esc(r.tier)+'</span>':'')+'</span></td>'
     +   '<td class="num" data-label="断层日期">'+esc(r.d||"—")+'</td>'
     +   '<td class="num" data-label="断层幅度"><span class="up">'+pctf(r.g)+'</span></td>'
+    /* 连续断层期数：口径与主看板一致 —— n≥1 显示「N 期」（≥2 期标红），n=0 显示裸 0。
+       「—」= 历史财报缺失（新股），与「0 期（有数据但本期不达标）」是两回事，不能合并。 */
+    +   '<td class="num" data-label="连续断层">'
+    +     (r.s == null ? '<span class="mut">—</span>'
+         : (r.s >= 2 ? '<span class="up">'+r.s+' 期</span>'
+           : (r.s >= 1 ? '<span class="mut">'+r.s+' 期</span>'
+                       : '<span class="mut">0</span>')))+'</td>'
     +   '<td class="num" data-label="当日涨跌幅"><span class="'+(r.dc>0?"up":r.dc<0?"down":"mut")+'">'+pctf(r.dc)+'</span></td>'
     +   '<td class="num" data-label="成交量">'+VOLFMT(r.v)+'</td>'
     +   '<td class="l" data-label="所属行业">'+esc(r.i||"—")+'</td>'
@@ -519,6 +527,7 @@ function renderPicks(){
   $("pSum").innerHTML = '<span>清单 <b>'+filtered.length+'</b> 只</span>'
     + '<span>断层幅度中位 <b>'+(gaps.length?gaps.slice().sort((a,b)=>a-b)[Math.floor(gaps.length/2)].toFixed(2)+"%":"—")+'</b></span>'
     + '<span>最大 <b>'+(gaps.length?Math.max.apply(null,gaps).toFixed(2)+"%":"—")+'</b></span>'
+    + '<span>连续断层 ≥2 期 <b>'+filtered.filter(r=>typeof r.s === "number" && r.s >= 2).length+'</b> 只</span>'
     + '<span class="mut">全量 '+all.length+' 只</span>';
 
   // 两个数据源各自的问题都要显示出来：日历的问题挂在日历页，清单的问题挂在选股页。
@@ -636,6 +645,9 @@ def build_picks(scan: dict) -> dict:
             "n": c.get("name", ""),
             "d": g.get("gap_date") or c.get("announce") or "",
             "g": g.get("gap_vs_close"),
+            # 连续断层期数（连续几期单季同比达标）。口径与主看板同一字段，不另算。
+            # 允许为 None：新股 / 历史财报缺失时主看板也是显示「—」，不能压成 0。
+            "s": c.get("streak"),
             "dc": g.get("day_chg"),
             "v": _vol_of(scan, c.get("code", ""), g.get("gap_date") or ""),
             "a": g.get("amount"),

@@ -70,6 +70,12 @@ setTimeout(() => {
     '窄屏清单仍是真表格': /#tbl td:before\{content:attr\(data-label\)/.test(html) ? '否' : '是',
     '窄屏清单吸附代码/名称列': /#tbl td:nth-child\(2\)\{left:0/.test(html) && /#tbl td:nth-child\(3\)\{left:64px/.test(html) ? '是' : '否',
     '窄屏清单容器无内滚动': /#list>\.tblwrap\{max-height:none/.test(html) ? '是' : '否',
+    // ---- 核心断层区（2026-10-06 新增区块）----
+    '核心区块数': qa('#core').length,
+    '核心区表头列数': qa('#ctbl thead th').length,
+    '核心区行数': qa('#ctbl tbody tr').length,
+    // 窄屏同样吸附首列（否则横滑看跳空/增速时不知道在看哪只）
+    '窄屏核心区吸附首列': /#ctbl td:first-child\{position:sticky;left:0/.test(html) ? '是' : '否',
   };
   // 连续断层期数列
   const si = Array.from(qa('#tbl thead th')).findIndex(t => t.dataset.k === 'streak');
@@ -299,6 +305,30 @@ setTimeout(() => {
   if (pgSample) {
     out['多期样例'] = pgSample.name + ' ' + (pgSample.period_gaps || [])
       .map(x => shortOf(x.label) + (x.valid ? '(跳' + x.gap_pct + '%)' : '(未跳空)')).join(' ');
+  }
+
+  // ---- 核心断层区：从 DOM 反读，与 payload 对账 ----
+  // 「连续断层」列 = 第 3 列。期数一律从渲染结果（如「3 期」）反读，不信任内部变量。
+  out['核心池数(payload)'] = (PAY && PAY.summary && PAY.summary.core) || 0;
+  {
+    const cellRows = Array.from(qa('#ctbl tbody tr')).map(t => Array.from(t.children));
+    out['核心区每行格数'] = Array.from(new Set(cellRows.map(c => c.length))).sort().join('/');
+    /* 三种状态必须分开数，否则「无历史数据」会被和「本期不达标（0 期）」混为一谈：
+       「3 期」→ 3 ／ 「0」→ 0 ／ 「—」→ -1（无数据，排最后）。 */
+    const streakOf = s => {
+      const t = String(s == null ? '' : s).trim();
+      if (t === '—' || t === '') return -1;
+      const m = /(\d+)/.exec(t);
+      return m ? Number(m[1]) : -1;
+    };
+    const arr = cellRows.map(c => streakOf(c[2] && c[2].textContent));
+    out['核心区连续断层(前8)'] = arr.slice(0, 8).join(',');
+    out['核心区连续断层降序'] = arr.every((v, i) => i === 0 || arr[i - 1] >= v) ? '是' : '否';
+    out['核心区连续断层≥2期条数'] = arr.filter(v => v >= 2).length;
+    out['核心区连续断层0期条数'] = arr.filter(v => v === 0).length;
+    out['核心区连续断层无数据条数'] = arr.filter(v => v < 0).length;
+    const kpiCard = Array.from(qa('#kpis .kpi')).find(x => /连续断层/.test(x.textContent));
+    out['KPI 连续断层卡值'] = kpiCard ? (kpiCard.querySelector('.v') || {}).textContent : '无';
   }
   const badPg = cands.filter(r => (r.period_gaps || []).some(x => x.valid && !x.gap_date));
   if (badPg.length) bad.push(badPg.length + ' 只个股的有效跳空期次缺 gap_date');
@@ -531,9 +561,30 @@ setTimeout(() => {
     if (s.asc[0] === null || isNaN(s.asc[0])) bad.push(label + ' 升序时缺失值未沉底');
   });
   // ---- 本轮新增：信息层级 / 可访问性 / 连续断层期数 / 注入安全 ----
-  if (out['KPI 卡数'] !== 3) bad.push('概览主指标应为 3 张，实际 ' + out['KPI 卡数']);
+  if (out['KPI 卡数'] !== 4) bad.push('概览主指标应为 4 张（清单个股 / 业绩正增长 / 仅价格缺口 / 连续断层 ≥2 期），实际 ' + out['KPI 卡数']);
   // 用户已明确要求删掉页面上所有解释性文案
   if (out['KPI 副标题数'] !== 0) bad.push('KPI 卡仍带口径副标题 ' + out['KPI 副标题数'] + ' 个，解释文案未删净');
+
+  // ---- 核心断层区（2026-10-06 新增）：区块在、列对齐、行数对得上、默认按连续断层降序 ----
+  if (out['核心区块数'] !== 1) bad.push('缺少「核心断层区」区块（#core）');
+  if (out['核心区表头列数'] !== 8) bad.push('核心断层区表头应为 8 列，实际 ' + out['核心区表头列数']);
+  if (out['核心区每行格数'] !== '8') {
+    bad.push('核心断层区每行应为 8 格，实际 ' + out['核心区每行格数'] +
+      '（表头与表体列数不一致会让整表左移错位，须 th/td 一起加或一起去掉）');
+  }
+  if (out['核心区行数'] !== out['核心池数(payload)']) {
+    bad.push('核心断层区行数 ' + out['核心区行数'] + ' ≠ payload summary.core ' + out['核心池数(payload)']);
+  }
+  if (!(out['核心区行数'] > 0)) bad.push('核心断层区没有渲染出任何个股');
+  if (out['核心区连续断层降序'] !== '是') bad.push('核心断层区未按「连续断层期数」降序：' + out['核心区连续断层(前8)']);
+  if (!(out['核心区连续断层≥2期条数'] > 0)) {
+    bad.push('核心断层区里没有任何「连续断层 ≥2 期」的个股，口径疑似取错（连续期数列应取第 3 列）');
+  }
+  if (out['KPI 连续断层卡值'] !== String(out['核心区连续断层≥2期条数'])) {
+    bad.push('概览「连续断层 ≥2 期」卡值 ' + out['KPI 连续断层卡值'] +
+      ' 与核心区实际条数 ' + out['核心区连续断层≥2期条数'] + ' 不一致');
+  }
+  if (out['窄屏核心区吸附首列'] !== '是') bad.push('窄屏核心断层区缺少吸附首列');
   if (out['残留说明区块'] !== '无（已按用户要求全部移除）') bad.push('仍残留说明区块：' + out['残留说明区块']);
   if (out['残留说明文案数'] !== 0) bad.push('页面仍残留解释文案（命中 ' + out['残留说明文案数'] + ' 类）');
   // 散点图：气泡必须可点击并真的能打开 K 线

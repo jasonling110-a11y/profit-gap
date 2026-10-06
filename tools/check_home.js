@@ -2,7 +2,7 @@
    用法：NODE_PATH=<含 jsdom 的 node_modules> node tools/check_home.js
 
    覆盖：分页切换与状态保持、月历切换、事件渲染（含「单类型/零事件日」回归）、
-        选股表六字段、日期区间筛选、断层幅度排序、响应式与交叉链接、注入防护。
+        选股表七字段、日期区间筛选、断层幅度排序、响应式与交叉链接、注入防护。
 */
 const fs = require("fs");
 const path = require("path");
@@ -65,10 +65,10 @@ console.log("[1] 结构与可用性");
      !!$("mPrev") && !!$("mNext") && !!$("mToday") && !!$("mLabel") && !!$("mGrid") && !!$("dList"));
   ok("选股页骨架：区间 / 快捷 / 搜索 / 重置 / 表体 / 汇总",
      !!$("pFrom") && !!$("pTo") && !!$("pQ") && !!$("pReset") && !!$("pBody") && !!$("pSum"));
-  ok("表格 6 列表头齐备",
-     doc.querySelectorAll("#pTbl th[data-k]").length === 6);
-  ok("表头字段名与需求一致（名称代码/断层日期/断层幅度/当日涨跌幅/成交量/行业）",
-     ["n","d","g","dc","v","i"].join(",") ===
+  ok("表格 7 列表头齐备",
+     doc.querySelectorAll("#pTbl th[data-k]").length === 7);
+  ok("表头字段名与需求一致（名称代码/断层日期/断层幅度/连续断层/当日涨跌幅/成交量/行业）",
+     ["n","d","g","s","dc","v","i"].join(",") ===
      Array.from(doc.querySelectorAll("#pTbl th[data-k]")).map(t => t.dataset.k).join(","));
   ok("表格有 caption（无障碍）", !!doc.querySelector("#pTbl caption"));
   ok("跳转主看板的链接可达",
@@ -276,7 +276,23 @@ console.log("\n[6] 利润断层选股平台 · 字段");
 
   ok("默认区间 = 全量（不隐藏任何个股）", dataTrs.length === ROWS.length,
      dataTrs.length + " / " + ROWS.length);
-  ok("每行 6 个单元格", dataTrs.every(t => t.children.length === 6));
+  ok("每行 7 个单元格", dataTrs.every(t => t.children.length === 7));
+  /* 连续断层期数列（第 4 格）：三种形态必须齐全才算真的接上了数据 ——
+     「N 期」= 连续 N 期达标 / 「0」= 有历史数据但本期不达标 / 「—」= 历史财报缺失。
+     只断言「有内容」是不够的：整列渲染成「—」也能通过。 */
+  {
+    const cells = dataTrs.map(t => t.children[3]).filter(Boolean);
+    ok("连续断层列有「N 期」取值", cells.some(c => /\d+\s*期/.test(c.textContent)),
+       cells.filter(c => /\d+\s*期/.test(c.textContent)).length + " 只");
+    ok("连续断层列含「≥2 期」的个股（该指标本身有区分度）",
+       cells.some(c => /([2-9]|\d\d)\s*期/.test(c.textContent)));
+    ok("连续断层列三种形态可分辨（N 期 / 0 / —）",
+       cells.every(c => /^(\d+\s*期|0|—)$/.test(c.textContent.trim())),
+       Array.from(new Set(cells.map(c => c.textContent.trim()))).slice(0, 6).join(" / "));
+    ok("连续断层列有 data-label（窄屏兜底）", cells.every(c => c.dataset.label === "连续断层"));
+    ok("汇总行含「连续断层 ≥2 期」计数",
+       /连续断层\s*≥2\s*期/.test(doc.getElementById("pSum").textContent));
+  }
   ok("每格带 data-label（列名基线；窄屏已改为真表格，该属性留作兜底）",
      dataTrs.every(t => Array.from(t.children).every(td => td.dataset.label)));
   ok("首列含股票名称与代码",
