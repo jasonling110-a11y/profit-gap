@@ -85,7 +85,10 @@ h1 span{color:var(--up)}
 .tab .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--line2);margin-right:7px;vertical-align:1px}
 .tab[aria-selected="true"] .dot{background:var(--up)}
 
-/* 外部模块（指数看盘）：iframe 必须有确定高度，否则全屏应用会塌陷成 0 */
+/* 外部模块（指数看盘）：iframe 必须有确定高度，否则全屏应用会塌陷成 0。
+   这里的高度只是「加载占位」——指数看盘 / 利润断层两个 iframe 在内容就绪后会被
+   fitFrame() 用内联样式撑到整页高（内联样式优先级高于本条与 ≤900px 那条），
+   滚轮直接滚本页，iframe 内部不再出现二级滚条（2026-10-07 用户要求）。 */
 .ext{background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;position:relative}
 .ext>iframe{display:block;width:100%;height:min(78vh,880px);border:0;background:var(--bg)}
 /* 加载遮罩：正常情况下 load 一到就消失；卡住时它就是「点一下重试」的隐形兜底
@@ -468,8 +471,55 @@ function loadExt(key, bust){
   f.setAttribute("src", bust
     ? m.url + (m.url.indexOf("?")>=0 ? "&" : "?") + "_r=" + Date.now()
     : m.url);
+  if(key==="pk"){
+    // 同源页面 load 后内容可能仍在渲染（表格异步填充），多量几次直到稳定
+    fitSameOrigin("pk"); setTimeout(()=>fitSameOrigin("pk"), 400);
+    setTimeout(()=>fitSameOrigin("pk"), 1500); setTimeout(()=>fitSameOrigin("pk"), 4000);
+    watchPkDoc();
+  }
   return f;
 }
+
+/* iframe 自适应整页高（2026-10-07 用户要求：指数看盘 / 利润断层页去掉 iframe 内部的二级滚条，
+   鼠标滚轮直接滚动本页）。三张 iframe 两种来源：
+  · 跨域（指数看盘）：对端页面在自身尾部把文档真实高度 postMessage 进来（type=app-embed-height），
+    这里按 source 找到对应 iframe 撑高；
+  · 同源（利润断层工作台，与本页同目录）：直接读 contentDocument 的 scrollHeight，
+    并用 ResizeObserver 盯住内部文档，内容长高自动跟。
+  完整日历是有意做成「一屏应用」（内部列表自己滚），维持原高度不动。 */
+function fitFrame(f, h){
+  if(!f || !h || h < 200) return;
+  f.style.height = Math.ceil(h) + "px";
+}
+function fitSameOrigin(key){
+  const f = $(EXTS[key].frame);
+  if(!f || !f.getAttribute("src")) return;
+  try{
+    const d = f.contentDocument;
+    if(d && d.documentElement)
+      fitFrame(f, Math.max(d.documentElement.scrollHeight, d.body ? d.body.scrollHeight : 0));
+  }catch(e){}
+}
+let PKRO = null;
+function watchPkDoc(){
+  try{
+    if(typeof ResizeObserver !== "function") return;
+    const f = $("pkFrame"), d = f && f.contentDocument;
+    if(!d || !d.documentElement) return;
+    if(PKRO) PKRO.disconnect();          // 重载（_r= 强刷）后重挂，避免叠加
+    PKRO = new ResizeObserver(()=>fitSameOrigin("pk"));
+    PKRO.observe(d.documentElement);
+  }catch(e){}
+}
+window.addEventListener("message", (e)=>{
+  const d = e.data;
+  if(!d || d.type !== "app-embed-height" || !(d.h > 0)) return;
+  for(const k in EXTS){
+    const f = $(EXTS[k].frame);
+    if(f && f.contentWindow === e.source){ fitFrame(f, d.h); break; }
+  }
+});
+window.addEventListener("resize", ()=>fitSameOrigin("pk"));
 on("tabCal", ()=>showPage("calendar"));
 on("tabIdx", ()=>showPage("indices"));
 on("tabPk",  ()=>showPage("picks"));

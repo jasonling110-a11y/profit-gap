@@ -293,6 +293,18 @@ setTimeout(() => {
 
   // ---- 数据侧：历史各期断层（period_gaps）----
   const bad = [];
+
+  // ---- 嵌入模式（2026-10-07 用户要求：被聚合页 iframe 嵌入时无二级滚条）----
+  // 静态源码检查：独立打开时该分支不执行，但代码必须存在且四件套齐全
+  out['嵌入模式分支'] = /window\.self !== window\.top/.test(html) ? '有' : '无';
+  out['嵌入弹层CSS'] = /html\.embed \.modal\.on[\s\S]*?\{position:absolute;bottom:auto\}/.test(html) ? '有' : '无';
+  if (out['嵌入模式分支'] !== '有') bad.push('缺少嵌入模式分支（window.self !== window.top）');
+  if (out['嵌入弹层CSS'] !== '有') bad.push('缺少 html.embed 弹层改位 CSS（position:absolute;bottom:auto）');
+  if (!/app-embed-height/.test(html)) bad.push('嵌入模式缺少高度上报（app-embed-height）');
+  if (!/parent\.addEventListener\("scroll", embedSync/.test(html)) bad.push('嵌入模式缺少父页滚动同步（embedSync）');
+  if (!/MutationObserver\(embedSync\)/.test(html)) bad.push('嵌入模式缺少弹层开合监听（MutationObserver）');
+  if (!/classList\.add\("embed"\)/.test(html)) bad.push('嵌入模式未给 html 打 embed 类');
+
   const shortOf = lab => String(lab || '').replace(/^\d{2}(\d{2})年/, '$1');
   let PAY = null;
   try { PAY = JSON.parse(d.getElementById('wb-payload').textContent); } catch (_) {}

@@ -678,6 +678,36 @@ console.log("\n[11] 工具栏删除后的行为兜底");
      hiddenOf(doc, "calIn") === true && hiddenOf(doc, "pkIn") === true);
 }
 
+console.log("\n[12] iframe 自适应整页高（滚轮直接滚外层，无二级滚条）");
+{
+  // --- postMessage 通道：跨域的指数看盘报高度，父页按 source 撑高 ---
+  ok("监听 app-embed-height 消息并按 source 匹配 iframe 撑高",
+     /addEventListener\("message"[\s\S]{0,200}app-embed-height/.test(html) &&
+     /contentWindow === e\.source/.test(html));
+
+  ok("高度过滤有效（忽略非正数/缺 type 的消息，防任意页面把 iframe 撑爆）",
+     /!\(d\.h > 0\)/.test(html));
+
+  // --- 同源路径：利润断层工作台直接量 contentDocument ---
+  ok("利润断层 iframe 用同源 scrollHeight 撑高（fitSameOrigin）",
+     /function fitSameOrigin\(/.test(html) &&
+     /fitSameOrigin\("pk"\)/.test(html) &&
+     /documentElement\.scrollHeight/.test(html));
+
+  ok("pk 内容长高自动跟（ResizeObserver 盯内部文档，重载时先 disconnect）",
+     /PKRO\s*=\s*new ResizeObserver/.test(html) && /PKRO\)\s*PKRO\.disconnect\(\)/.test(html));
+
+  ok("父页 resize 时同源 iframe 重新量高",
+     /addEventListener\("resize",\s*\(\)=>fitSameOrigin\("pk"\)/.test(html));
+
+  // --- 负向保护：完整日历不参与撑高（它是有意做成一屏应用） ---
+  ok("完整日历维持一屏应用高度（不接 autofit，fitFrame 只由消息/同源路径触发）",
+     !/fitSameOrigin\("cal"\)/.test(html) && !/watchPkDoc\(\).*cal/i.test(html));
+
+  ok("CSS 占位高度注释说明会被内联样式覆盖（口径不误导后来人）",
+     /加载占位/.test(html) && /fitFrame/.test(html));
+}
+
 console.log("\n----------------------------");
 console.log(`通过 ${pass} 项，失败 ${fail} 项`);
 console.log(fail === 0 ? "✅ 个人投资工作台自检通过" : "❌ 存在失败项");

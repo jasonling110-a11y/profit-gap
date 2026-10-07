@@ -143,6 +143,9 @@ tbody tr:focus-within{background:var(--panel2)}
 .bar .fillW{background:rgba(79,140,201,.5);height:100%}
 .bar .num{font-size:12px;color:var(--tx2);text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .modal{position:fixed;inset:0;background:rgba(5,8,12,.72);display:none;align-items:center;justify-content:center;padding:14px;z-index:50;-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px)}
+/* 嵌入聚合页（iframe 被撑成整页高、由父页滚动）时，弹层不能再贴 iframe 视口：
+   改为绝对定位，top/height 由脚本按父页 scrollY / innerHeight 实时接管（见脚本尾部嵌入模式段）。 */
+html.embed .modal.on, html.embed #calMask.on, html.embed #calShell.on{position:absolute;bottom:auto}
 .modal.on{display:flex}
 /* K 线优先：弹窗纵向 flex，图表区 flex:1 占满剩余可视高度。
    图表上方只留标题 + 紧凑指标条，其余信息一律下沉到图表之后；
@@ -1791,6 +1794,51 @@ applyHash();
   var boot = modForHash(location.hash);
   if(boot) openMod(boot);
 })();
+
+/* ── 嵌入模式（2026-10-07 用户要求）────────────────────────────────
+   被「个人投资工作台」聚合页 iframe 嵌入时：iframe 被父页撑到整页高，
+   本页不再有自身滚条（滚轮滚的是父页）。三个 fixed 弹层（K线弹窗 .modal、
+   月历覆盖层 #calMask/#calShell）若仍贴 iframe 视口，会定位到整页顶部之外，
+   用户在父页滚到中段时弹窗根本看不见 —— 改为绝对定位，top 跟随父页 scrollY、
+   高度取父页 innerHeight，弹窗永远出现在用户眼前。独立打开时整段是空操作。 */
+if(window.self !== window.top){
+  document.documentElement.classList.add("embed");
+  var embedSync = function(){
+    var py = 0, ph = 0;
+    try{ py = parent.scrollY; ph = parent.innerHeight; }catch(e){ return; }
+    document.querySelectorAll(".modal.on, #calMask.on, #calShell.on").forEach(function(el){
+      el.style.position = "absolute";
+      el.style.top = py + "px";
+      el.style.height = ph + "px";
+      el.style.bottom = "auto";
+    });
+  };
+  try{
+    parent.addEventListener("scroll", embedSync, { passive:true });
+    parent.addEventListener("resize", embedSync);
+  }catch(e){}
+  /* 弹层开合靠 class 切换：subtree 观察到 .on 变化就校准一次（开 K线 / 开月历都覆盖） */
+  if(typeof MutationObserver === "function"){
+    new MutationObserver(embedSync).observe(document.body,
+      { subtree:true, attributes:true, attributeFilter:["class"] });
+  }
+  /* 把文档真实高度报给父页（父页同源时自己也会量，这条是跨域嵌入时的兜底） */
+  var embedRep = null;
+  var embedReport = function(){
+    embedRep = null;
+    var h = Math.max(document.documentElement.scrollHeight,
+                     document.body ? document.body.scrollHeight : 0);
+    try{ parent.postMessage({ type:"app-embed-height", h:h }, "*"); }catch(e){}
+  };
+  var embedQueue = function(){ if(!embedRep) embedRep = setTimeout(embedReport, 120); };
+  window.addEventListener("load", embedQueue);
+  window.addEventListener("resize", embedQueue);
+  setTimeout(embedReport, 300);
+  setTimeout(embedReport, 1500);
+  if(typeof ResizeObserver === "function"){
+    try{ new ResizeObserver(embedQueue).observe(document.documentElement); }catch(e){}
+  }
+}
 </script>
 </body>
 </html>
